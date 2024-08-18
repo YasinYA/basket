@@ -1,3 +1,8 @@
+mod history_file;
+
 fn main() {
-    println!("Hello, world!");
+    match history_file::load_history() {
+        Ok(history) => println!("{}", history),
+        Err(e) => eprintln!("Error: {}", e),
+    }
 }
