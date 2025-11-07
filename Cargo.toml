@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 chrono = "0.4"
+envvars = "0.1.10"
 rusqlite = { version = "0.37.0", features = ["bundled"] }
 [dependencies.uuid]
 version = "1.18.1"

@@ -1,12 +1,27 @@
 use crate::db::{get_last_entry, insert_history_entry, Entry};
 use chrono::{TimeZone, Utc};
+use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use uuid::Uuid;
 
-// TODO: Move this Contants to args
-const HISTORY_FILE: &str = "/Users/yasinya/.zsh_history";
-const SHELL: &str = "ZSH";
+pub enum ShellType {
+    ZSH(String),
+    BASH(String),
+}
+
+pub fn detect_user_shell() -> ShellType {
+    let active_shell = env::var("SHELL").unwrap_or(String::from("/bin/zsh"));
+    // Don't think there is a case where home dir wouldnt be defined
+    // for the usecase of this program.
+    let user_home_dir = env::var("HOME").unwrap_or(String::from("/home/unknown"));
+
+    if active_shell.ends_with("bash") {
+        ShellType::BASH(String::from(format!("{}/.bash_history", user_home_dir)))
+    } else {
+        ShellType::ZSH(String::from(format!("{}/.zsh_history", user_home_dir)))
+    }
+}
 
 fn load_history_from_zsh(
     line: &str,
@@ -53,7 +68,18 @@ fn load_history_from_bash(
 }
 
 fn load_history_data() -> Result<Vec<(i64, String)>, Box<dyn std::error::Error>> {
-    let file = File::open(HISTORY_FILE)?;
+    let active_shell = detect_user_shell();
+    let parser: fn(&str, &mut Vec<(i64, String)>, &mut Option<i64>) = match active_shell {
+        ShellType::ZSH(_) => load_history_from_zsh,
+        ShellType::BASH(_) => load_history_from_bash,
+    };
+
+    // Extract the history file path from the enum
+    let history_file_path = match &active_shell {
+        ShellType::ZSH(path) | ShellType::BASH(path) => path,
+    };
+
+    let file = File::open(history_file_path)?;
     let reader: BufReader<File> = BufReader::new(file);
 
     // Vector to hold (timestamp, command) tuples
@@ -63,11 +89,7 @@ fn load_history_data() -> Result<Vec<(i64, String)>, Box<dyn std::error::Error>>
     for line in reader.lines() {
         match line {
             Ok(line) => {
-                if SHELL == "ZSH" {
-                    load_history_from_zsh(&line, &mut history_entries, &mut current_timestamp);
-                } else {
-                    load_history_from_bash(&line, &mut history_entries, &mut current_timestamp);
-                }
+                parser(&line, &mut history_entries, &mut current_timestamp);
             }
             Err(err) => eprintln!("Error: {}", err),
         }

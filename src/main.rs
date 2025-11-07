@@ -20,4 +20,6 @@ fn main() {
     if let Err(e) = history_file::save_history() {
         eprintln!("Failed to load history: {}", e);
     }
+
+    history_file::detect_user_shell();
 }

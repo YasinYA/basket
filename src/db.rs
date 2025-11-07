@@ -115,11 +115,3 @@ pub fn get_last_entry() -> Result<Entry, Box<dyn Error>> {
         return Err("No entries found".into());
     }
 }
-
-// pub fn edit_entry(id: String, data: Vec<(i64, String)>) -> Result<(), Box<dyn Error>> {
-//     Ok(())
-// }
-
-// pub fn delete_entry(id: String) -> Result<(), Box<dyn Error>> {
-//     Ok(())
-// }
