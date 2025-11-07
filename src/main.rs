@@ -1,5 +1,10 @@
 mod db;
+mod helpers;
 mod history_file;
+mod logging;
+
+use helpers::detect_user_shell;
+use logging::{log_to_console, Status};
 
 fn main() {
     // Connect to the database
@@ -7,19 +12,21 @@ fn main() {
         Ok(conn) => {
             // Create the database and table if they don't exist
             if let Err(e) = db::create_db(&conn) {
-                eprintln!("Failed to create database: {}", e);
+                log_to_console(&format!("Failed to create database: {}", e), Status::ERROR);
                 return;
             }
-            // Use the connection
-            println!("Database connection established.");
+            log_to_console("Database connection established.", Status::SUCCESS);
         }
-        Err(e) => eprintln!("Failed to establish database connection: {}", e),
+        Err(e) => log_to_console(
+            &format!("Failed to establish database connection: {}", e),
+            Status::ERROR,
+        ),
     }
 
     // Load history from the file and insert it into the database
     if let Err(e) = history_file::save_history() {
-        eprintln!("Failed to load history: {}", e);
+        log_to_console(&format!("Failed to load history: {}", e), Status::ERROR);
     }
 
-    history_file::detect_user_shell();
+    detect_user_shell();
 }

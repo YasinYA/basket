@@ -1,3 +1,4 @@
+use crate::logging::{log_to_console, Status};
 use rusqlite::{params, Connection, Result};
 use std::error::Error;
 use uuid::Uuid;
@@ -18,7 +19,10 @@ pub fn establish_connection() -> Result<Connection, Box<dyn Error>> {
     let conn = match Connection::open(DB_FILE) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Failed to connect to the database: {}", e);
+            log_to_console(
+                &format!("Failed to connect to the database: {}", e),
+                Status::ERROR,
+            );
             return Err(Box::new(e));
         }
     };
@@ -36,11 +40,10 @@ pub fn create_db(conn: &Connection) -> Result<(), Box<dyn Error>> {
         )",
         [],
     ) {
-        eprintln!("Failed to create table: {}", e);
+        log_to_console(&format!("Failed to create table: {}", e), Status::ERROR);
         return Err(Box::new(e));
     }
-
-    println!("Database tables created successfully.");
+    log_to_console("Database tables created successfully.", Status::SUCCESS);
     Ok(())
 }
 
@@ -58,11 +61,18 @@ pub fn insert_history_entry(
                 "INSERT INTO history (id, timestamp, command, date) VALUES (?1, ?2, ?3, ?4)",
                 params![id.to_string(), timestamp, command, date],
             ) {
-                eprintln!("Failed to insert history entry: {}", e);
+                log_to_console(
+                    &format!("Failed to insert history entry: {}", e),
+                    Status::ERROR,
+                );
+                eprintln!();
                 return Err(Box::new(e));
             }
         }
-        Err(e) => eprintln!("Failed to establish database connection: {}", e),
+        Err(e) => log_to_console(
+            &format!("Failed to establish database connection: {}", e),
+            Status::ERROR,
+        ),
     }
 
     Ok(())
@@ -89,7 +99,10 @@ fn _get_all_history_entries() -> Result<(), Box<dyn Error>> {
                 println!("command: {}", entry.command);
             }
         }
-        Err(e) => eprintln!("Failed to establish the database connection: {}", e),
+        Err(e) => log_to_console(
+            &format!("Failed to establish the database connection: {}", e),
+            Status::ERROR,
+        ),
     }
 
     Ok(())
@@ -112,6 +125,7 @@ pub fn get_last_entry() -> Result<Entry, Box<dyn Error>> {
         let entry = result?;
         return Ok(entry);
     } else {
+        log_to_console("No entries found", Status::ERROR);
         return Err("No entries found".into());
     }
 }

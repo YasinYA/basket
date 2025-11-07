@@ -1,27 +1,11 @@
 use crate::db::{get_last_entry, insert_history_entry, Entry};
 use chrono::{TimeZone, Utc};
-use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use uuid::Uuid;
 
-pub enum ShellType {
-    ZSH(String),
-    BASH(String),
-}
-
-pub fn detect_user_shell() -> ShellType {
-    let active_shell = env::var("SHELL").unwrap_or(String::from("/bin/zsh"));
-    // Don't think there is a case where home dir wouldnt be defined
-    // for the usecase of this program.
-    let user_home_dir = env::var("HOME").unwrap_or(String::from("/home/unknown"));
-
-    if active_shell.ends_with("bash") {
-        ShellType::BASH(String::from(format!("{}/.bash_history", user_home_dir)))
-    } else {
-        ShellType::ZSH(String::from(format!("{}/.zsh_history", user_home_dir)))
-    }
-}
+use crate::helpers::{detect_user_shell, ShellType};
+use crate::logging::{log_to_console, Status};
 
 fn load_history_from_zsh(
     line: &str,
@@ -91,7 +75,7 @@ fn load_history_data() -> Result<Vec<(i64, String)>, Box<dyn std::error::Error>>
             Ok(line) => {
                 parser(&line, &mut history_entries, &mut current_timestamp);
             }
-            Err(err) => eprintln!("Error: {}", err),
+            Err(err) => log_to_console(&err.to_string(), Status::ERROR),
         }
     }
 
@@ -102,7 +86,10 @@ pub fn save_history() -> Result<(), Box<dyn std::error::Error>> {
     let last_entry = match get_last_entry() {
         Ok(entry) => entry,
         Err(e) => {
-            eprintln!("Warning: couldn't fetch last row: {}", e);
+            log_to_console(
+                &format!("Warning: couldn't fetch last row: {}", e),
+                Status::WARNING,
+            );
             Entry {
                 id: Uuid::new_v4().to_string(),
                 timestamp: 0,
@@ -112,11 +99,11 @@ pub fn save_history() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    println!("Loading history from file...");
+    log_to_console("Loading history from file...", Status::INFO);
     if last_entry.timestamp == 0 {
-        println!("Fresh DB");
+        log_to_console("Fresh DB", Status::INFO);
     } else {
-        println!("Inserted only unsaved entries.");
+        log_to_console("Inserted only unsaved entries.", Status::INFO);
     }
     match load_history_data() {
         Ok(history_entries) => {
@@ -128,16 +115,20 @@ pub fn save_history() -> Result<(), Box<dyn std::error::Error>> {
                         if let Err(err) =
                             insert_history_entry(&timestamp, &command, &formatted_datetime)
                         {
-                            eprintln!("Failed to insert history entry: {}", err);
+                            log_to_console(
+                                &format!("Failed to insert history entry: {}", err),
+                                Status::ERROR,
+                            )
                         }
                     }
                 } else {
-                    eprintln!("Invalid timestamp: {}", timestamp);
+                    log_to_console(&format!("Invalid timestamp: {}", timestamp), Status::ERROR);
                 }
             }
+            log_to_console("Successfully inserted history", Status::SUCCESS);
         }
         Err(err) => {
-            eprintln!("Failed to load history: {}", err);
+            log_to_console(&format!("Failed to load history: {}", err), Status::ERROR);
         }
     }
 
