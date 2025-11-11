@@ -78,34 +78,27 @@ pub fn insert_history_entry(
     Ok(())
 }
 
-fn _get_all_history_entries() -> Result<(), Box<dyn Error>> {
-    match establish_connection() {
-        Ok(conn) => {
-            let mut stmt = conn.prepare("SELECT id, timestamp, command, date FROM history")?;
+pub fn get_all_history_entries() -> Result<Vec<Entry>, Box<dyn Error>> {
+    let conn = establish_connection()?;
+    let mut stmt = conn.prepare("SELECT id, timestamp, command, date FROM history")?;
 
-            let rows = stmt.query_map([], |row| {
-                Ok(Entry {
-                    id: row.get::<_, String>(0)?,
-                    timestamp: row.get::<_, i64>(1)?,
-                    command: row.get::<_, String>(2)?,
-                    date: row.get::<_, String>(3)?,
-                })
-            })?;
+    let entries_iter = stmt.query_map([], |row| {
+        Ok(Entry {
+            id: row.get::<_, String>(0)?,
+            timestamp: row.get::<_, i64>(1)?,
+            command: row.get::<_, String>(2)?,
+            date: row.get::<_, String>(3)?,
+        })
+    })?;
 
-            for x in rows {
-                let entry = x?;
-                println!("id: {}", entry.id);
-                println!("timestamp: {}", entry.timestamp);
-                println!("command: {}", entry.command);
-            }
-        }
-        Err(e) => log_to_console(
-            &format!("Failed to establish the database connection: {}", e),
-            Status::ERROR,
-        ),
-    }
+    let entries: Result<Vec<Entry>, _> = entries_iter.collect();
 
-    Ok(())
+    // log_to_console(
+    //     &format!("Failed to establish the database connection: {}", e),
+    //     Status::ERROR,
+    // );
+
+    Ok(entries?)
 }
 
 pub fn get_last_entry() -> Result<Entry, Box<dyn Error>> {

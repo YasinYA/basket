@@ -1,8 +1,10 @@
+mod analyze_commands;
 mod db;
 mod helpers;
 mod history_file;
 mod logging;
 
+use analyze_commands::overview_analysis;
 use helpers::detect_user_shell;
 use logging::{log_to_console, Status};
 
@@ -29,4 +31,5 @@ fn main() {
     }
 
     detect_user_shell();
+    overview_analysis();
 }

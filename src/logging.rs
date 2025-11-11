@@ -27,3 +27,15 @@ pub fn log_to_console(message: &str, status: Status) {
     let text = format!("{}: {}", content, message);
     println!("{}", text);
 }
+
+pub fn log_table_to_console(title: &str, emoji: Emoji, data: &[Vec<String>]) {
+    println!("{} {}", emoji, title);
+    for _dash in [0..title.len()] {
+        println!("_");
+    }
+
+    println!("Command | Occurance");
+    for item in data {
+        println!("{} | {}", item[0], item[1]);
+    }
+}
