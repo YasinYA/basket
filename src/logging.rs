@@ -30,12 +30,29 @@ pub fn log_to_console(message: &str, status: Status) {
 
 pub fn log_table_to_console(title: &str, emoji: Emoji, data: &[Vec<String>]) {
     println!("{} {}", emoji, title);
-    for _dash in [0..title.len()] {
-        println!("_");
+    for _ in 0..title.len() * 3 {
+        print!("_");
     }
+    println!();
 
-    println!("Command | Occurance");
+    let max_len = data.iter().map(|item| item[0].len()).max().unwrap_or(0);
+
+    println!(
+        "{:<width$}           |           {:<10}",
+        "Command",
+        "Occurrence",
+        width = max_len
+    );
+    for _ in 0..title.len() * 3 {
+        print!("_");
+    }
+    println!();
     for item in data {
-        println!("{} | {}", item[0], item[1]);
+        println!(
+            "{ :<width$}           |           {:<10}",
+            item[0],
+            item[1],
+            width = max_len
+        );
     }
 }
