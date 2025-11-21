@@ -9,6 +9,17 @@ use helpers::detect_user_shell;
 use logging::{log_to_console, Status};
 
 fn main() {
+    println!(
+        r#"
+    _               _        _
+   | |             | |      | |
+   | |__   __ _ ___| | _____| |_
+   | '_ \ / _` / __| |/ / _ \ __|
+   | |_) | (_| \__ \   <  __/ |_
+   |_.__/ \__,_|___/_|\_\___|\__|
+
+       "#
+    );
     // Connect to the database
     match db::establish_connection() {
         Ok(conn) => {
