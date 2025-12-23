@@ -8,6 +8,7 @@ chrono = "0.4"
 colored = "3.0.0"
 envvars = "0.1.10"
 rusqlite = { version = "0.37.0", features = ["bundled"] }
+strsim = "0.11.1"
 terminal-emoji = "0.4.1"
 [dependencies.uuid]
 version = "1.18.1"

@@ -17,3 +17,11 @@ pub fn detect_user_shell() -> ShellType {
         ShellType::ZSH(String::from(format!("{}/.zsh_history", user_home_dir)))
     }
 }
+
+pub fn max_distance(cmd: &str) -> usize {
+    match cmd.len() {
+        0..=4 => 1,
+        5..=8 => 2,
+        _ => 3,
+    }
+}
