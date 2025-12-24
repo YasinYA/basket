@@ -2,10 +2,12 @@ mod analyze_commands;
 mod db;
 mod helpers;
 mod history_file;
+mod init;
 mod logging;
 
 use analyze_commands::overview_analysis;
 use helpers::detect_user_shell;
+use init::setup;
 use logging::{log_to_console, Status};
 
 fn main() {
@@ -41,6 +43,7 @@ fn main() {
         log_to_console(&format!("Failed to load history: {}", e), Status::ERROR);
     }
 
+    let _ = setup();
     detect_user_shell();
     overview_analysis();
 }

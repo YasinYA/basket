@@ -95,6 +95,7 @@ pub fn save_history() -> Result<(), Box<dyn std::error::Error>> {
                 timestamp: 0,
                 command: String::new(),
                 date: Utc.to_string(),
+                status: crate::db::CommandStatus::Unknown,
             }
         }
     };
@@ -112,9 +113,12 @@ pub fn save_history() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(datetime_utc) = Utc.timestamp_opt(timestamp, 0).single() {
                     let formatted_datetime = datetime_utc.format("%Y-%m-%d %H:%M:%S").to_string();
                     if timestamp > last_entry.timestamp {
-                        if let Err(err) =
-                            insert_history_entry(&timestamp, &command, &formatted_datetime)
-                        {
+                        if let Err(err) = insert_history_entry(
+                            &timestamp,
+                            &command,
+                            &formatted_datetime,
+                            Some(crate::db::CommandStatus::Unknown),
+                        ) {
                             log_to_console(
                                 &format!("Failed to insert history entry: {}", err),
                                 Status::ERROR,
