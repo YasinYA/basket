@@ -6,6 +6,7 @@ use uuid::Uuid;
 const DB_FILE: &str = "/Users/yasinya/basket.db";
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum CommandStatus {
     Success,
     Error(i32),

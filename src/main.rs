@@ -4,6 +4,7 @@ mod helpers;
 mod history_file;
 mod init;
 mod logging;
+mod realtime_commands;
 
 use analyze_commands::overview_analysis;
 use helpers::detect_user_shell;

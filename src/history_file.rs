@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::helpers::{detect_user_shell, ShellType};
 use crate::logging::{log_to_console, Status};
+use crate::realtime_commands::watch_cmdlog;
 
 fn load_history_from_zsh(
     line: &str,
@@ -52,6 +53,7 @@ fn load_history_from_bash(
 }
 
 fn load_history_data() -> Result<Vec<(i64, String)>, Box<dyn std::error::Error>> {
+    watch_cmdlog();
     let active_shell = detect_user_shell();
     let parser: fn(&str, &mut Vec<(i64, String)>, &mut Option<i64>) = match active_shell {
         ShellType::ZSH(_) => load_history_from_zsh,
