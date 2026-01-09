@@ -47,6 +47,10 @@ struct AppState {
     chart_selection: [usize; 3],
     table_index: usize,
     table_selection: [usize; 3],
+    sort_asc: bool,
+    filter_query: String,
+    filter_input: bool,
+    filter_buffer: String,
 }
 
 impl AppState {
@@ -63,6 +67,10 @@ impl AppState {
             chart_selection: [0, 0, 0],
             table_index: 0,
             table_selection: [0, 0, 0],
+            sort_asc: true,
+            filter_query: String::new(),
+            filter_input: false,
+            filter_buffer: String::new(),
         }
     }
 }
@@ -119,12 +127,41 @@ fn run_loop(
                 app.chart_selection,
                 app.table_index,
                 app.table_selection,
+                &app.filter_query,
+                app.sort_asc,
+                app.filter_input,
+                &app.filter_buffer,
             ),
             Screen::Error(message) => render_error(frame, message),
         })?;
 
         if event::poll(Duration::from_millis(200))? {
             if let Event::Key(key) = event::read()? {
+                if app.filter_input {
+                    match key.code {
+                        KeyCode::Enter => {
+                            app.filter_query = app.filter_buffer.trim().to_string();
+                            app.filter_input = false;
+                            app.table_selection = [0, 0, 0];
+                        }
+                        KeyCode::Esc => {
+                            app.filter_query.clear();
+                            app.filter_buffer.clear();
+                            app.filter_input = false;
+                            app.table_selection = [0, 0, 0];
+                        }
+                        KeyCode::Backspace => {
+                            app.filter_buffer.pop();
+                        }
+                        KeyCode::Char(c) => {
+                            if !c.is_control() {
+                                app.filter_buffer.push(c);
+                            }
+                        }
+                        _ => {}
+                    }
+                    continue;
+                }
                 match app.screen {
                     Screen::Menu => match key.code {
                         KeyCode::Up => {
@@ -167,6 +204,25 @@ fn run_loop(
                             app.overview_view = OverviewView::Tables;
                             app.table_index = 0;
                         }
+                        KeyCode::Char('s') => {
+                            if matches!(app.overview_view, OverviewView::Tables) {
+                                app.sort_asc = !app.sort_asc;
+                                app.table_selection = [0, 0, 0];
+                            }
+                        }
+                        KeyCode::Char('/') => {
+                            if matches!(app.overview_view, OverviewView::Tables) {
+                                app.filter_input = true;
+                                app.filter_buffer = app.filter_query.clone();
+                            }
+                        }
+                        KeyCode::Char('x') => {
+                            if matches!(app.overview_view, OverviewView::Tables) {
+                                app.filter_query.clear();
+                                app.filter_buffer.clear();
+                                app.table_selection = [0, 0, 0];
+                            }
+                        }
                         KeyCode::Left => {
                             if matches!(app.overview_view, OverviewView::Charts) {
                                 if app.chart_index == 0 {
@@ -201,7 +257,11 @@ fn run_loop(
                                     }
                                 }
                             } else if matches!(app.overview_view, OverviewView::Tables) {
-                                let len = chart_len(app.overview.as_ref(), app.table_index);
+                                let len = table_len_filtered(
+                                    app.overview.as_ref(),
+                                    app.table_index,
+                                    &app.filter_query,
+                                );
                                 if len > 0 {
                                     let idx = &mut app.table_selection[app.table_index];
                                     if *idx == 0 {
@@ -220,7 +280,11 @@ fn run_loop(
                                     *idx = (*idx + 1) % len;
                                 }
                             } else if matches!(app.overview_view, OverviewView::Tables) {
-                                let len = chart_len(app.overview.as_ref(), app.table_index);
+                                let len = table_len_filtered(
+                                    app.overview.as_ref(),
+                                    app.table_index,
+                                    &app.filter_query,
+                                );
                                 if len > 0 {
                                     let idx = &mut app.table_selection[app.table_index];
                                     *idx = (*idx + 1) % len;
@@ -329,6 +393,10 @@ fn render_overview(
     chart_selection: [usize; 3],
     table_index: usize,
     table_selection: [usize; 3],
+    filter_query: &str,
+    sort_asc: bool,
+    filter_input: bool,
+    filter_buffer: &str,
 ) {
     let size = frame.area();
     let layout = Layout::default()
@@ -348,11 +416,17 @@ fn render_overview(
                     ])
                     .split(layout[0]);
 
+                let top_commands = filter_sort_rows(&tables.top_commands, filter_query, sort_asc);
+                let top_unsuccessful =
+                    filter_sort_rows(&tables.top_unsuccessful, filter_query, sort_asc);
+                let mistyped_commands =
+                    filter_sort_rows(&tables.mistyped_commands, filter_query, sort_asc);
+
                 render_table(
                     frame,
                     chunks[0],
                     "Command Occurrences",
-                    &tables.top_commands,
+                    &top_commands,
                     table_selection[0],
                     table_index == 0,
                 );
@@ -360,7 +434,7 @@ fn render_overview(
                     frame,
                     chunks[1],
                     "Most Unsuccessful Commands",
-                    &tables.top_unsuccessful,
+                    &top_unsuccessful,
                     table_selection[1],
                     table_index == 1,
                 );
@@ -368,7 +442,7 @@ fn render_overview(
                     frame,
                     chunks[2],
                     "Most Mistyped Commands",
-                    &tables.mistyped_commands,
+                    &mistyped_commands,
                     table_selection[2],
                     table_index == 2,
                 );
@@ -418,12 +492,27 @@ fn render_overview(
         frame.render_widget(empty, layout[0]);
     }
 
-    let footer_text = match view {
-        OverviewView::Tables => "t: tables  c: charts  ←/→: table  ↑/↓: row  b: back  q: quit",
-        OverviewView::Charts => "t: tables  c: charts  ←/→: chart  ↑/↓: slice  b: back  q: quit",
+    let sort_label = if sort_asc { "A->Z" } else { "Z->A" };
+    let filter_label = if filter_query.is_empty() {
+        "none"
+    } else {
+        filter_query
     };
-    let footer = Paragraph::new(footer_text).block(Block::default().borders(Borders::TOP));
+    let footer = match view {
+        OverviewView::Tables => Paragraph::new(format!(
+            "t: tables  c: charts  ←/→: table  ↑/↓: row  s: sort({})  /: filter({})  x: clear  b: back  q: quit",
+            sort_label, filter_label
+        )),
+        OverviewView::Charts => Paragraph::new(
+            "t: tables  c: charts  ←/→: chart  ↑/↓: slice  b: back  q: quit",
+        ),
+    }
+    .block(Block::default().borders(Borders::TOP));
     frame.render_widget(footer, layout[1]);
+
+    if filter_input {
+        render_filter_prompt(frame, layout[0], filter_buffer);
+    }
 }
 
 fn render_error(frame: &mut Frame, message: &str) {
@@ -443,29 +532,65 @@ fn render_table(
     selected_index: usize,
     is_focused: bool,
 ) {
+    let selected = selected_index.min(data.len().saturating_sub(1));
     let rows: Vec<Row> = if data.is_empty() {
         vec![Row::new(vec!["(no data)".to_string(), "".to_string()])]
     } else {
-        data.iter()
-            .enumerate()
-            .map(|(idx, row)| {
-                let left = row.get(0).cloned().unwrap_or_default();
-                let right = row.get(1).cloned().unwrap_or_default();
-                let style = if idx % 2 == 0 {
-                    Style::default().fg(Color::White)
-                } else {
-                    Style::default().fg(Color::Gray)
-                };
-                Row::new(vec![left, right]).style(style)
-            })
-            .collect()
+        let inner_width = area.width.saturating_sub(2) as usize;
+        let col1_width = ((inner_width as f32) * 0.7).floor() as usize;
+        let col2_width = inner_width.saturating_sub(col1_width + 1).max(1);
+
+        let separator = Row::new(vec![
+            "─".repeat(col1_width.max(1)),
+            "─".repeat(col2_width.max(1)),
+        ])
+        .style(Style::default().fg(Color::Blue));
+
+        let mut out = Vec::with_capacity(data.len() + 1);
+        out.push(separator);
+
+        for (idx, row) in data.iter().enumerate() {
+            let left = row.get(0).cloned().unwrap_or_default();
+            let right = row.get(1).cloned().unwrap_or_default();
+            let style = if idx % 2 == 0 {
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+                    .fg(Color::Gray)
+                    .add_modifier(Modifier::BOLD)
+            };
+            if is_focused && idx == selected {
+                let left_text = Text::from(vec![
+                    Line::raw(""),
+                    Line::raw(format!("➤ {}", left)),
+                    Line::raw(""),
+                ]);
+                let right_text = Text::from(vec![Line::raw(""), Line::raw(right), Line::raw("")]);
+                out.push(Row::new(vec![left_text, right_text]).style(style).height(3));
+            } else {
+                let left_text = Text::from(vec![
+                    Line::raw(""),
+                    Line::raw(format!("  {}", left)),
+                    Line::raw(""),
+                ]);
+                let right_text = Text::from(vec![Line::raw(""), Line::raw(right), Line::raw("")]);
+                out.push(Row::new(vec![left_text, right_text]).style(style).height(3));
+            }
+        }
+
+        out
     };
 
-    let header = Row::new(vec!["Command", "Count"]).style(
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD),
-    );
+    let header = Row::new(vec!["Command", "Count"])
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
+        .height(3)
+        .top_margin(1);
 
     let table = Table::new(
         rows,
@@ -478,16 +603,18 @@ fn render_table(
             .title(title)
             .border_style(Style::default().fg(Color::Blue)),
     )
+    .column_spacing(3)
     .row_highlight_style(
         Style::default()
             .fg(Color::Yellow)
+            .bg(Color::Gray)
             .add_modifier(Modifier::BOLD),
     )
-    .highlight_symbol("➤ ");
+    .highlight_symbol("");
 
     let mut state = TableState::default();
     if !data.is_empty() {
-        state.select(Some(selected_index.min(data.len().saturating_sub(1))));
+        state.select(Some(selected + 1));
     }
     if is_focused {
         frame.render_stateful_widget(table, area, &mut state);
@@ -630,6 +757,80 @@ fn chart_len(tables: Option<&OverviewTables>, chart_index: usize) -> usize {
         1 => tables.top_unsuccessful.len(),
         _ => tables.mistyped_commands.len(),
     }
+}
+
+fn table_len_filtered(tables: Option<&OverviewTables>, table_index: usize, filter: &str) -> usize {
+    let tables = match tables {
+        Some(t) => t,
+        None => return 0,
+    };
+
+    let data = match table_index {
+        0 => &tables.top_commands,
+        1 => &tables.top_unsuccessful,
+        _ => &tables.mistyped_commands,
+    };
+
+    let filter = filter.trim().to_lowercase();
+    if filter.is_empty() {
+        return data.len();
+    }
+
+    data.iter()
+        .filter(|row| {
+            row.get(0)
+                .map(|cmd| cmd.to_lowercase().contains(&filter))
+                .unwrap_or(false)
+        })
+        .count()
+}
+
+fn filter_sort_rows(data: &[Vec<String>], filter: &str, asc: bool) -> Vec<Vec<String>> {
+    let filter = filter.trim().to_lowercase();
+    let mut rows: Vec<Vec<String>> = data
+        .iter()
+        .filter(|row| {
+            if filter.is_empty() {
+                return true;
+            }
+            row.get(0)
+                .map(|cmd| cmd.to_lowercase().contains(&filter))
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect();
+
+    rows.sort_by(|a, b| {
+        let a_cmd = a.get(0).map(String::as_str).unwrap_or("");
+        let b_cmd = b.get(0).map(String::as_str).unwrap_or("");
+        let ord = a_cmd.to_lowercase().cmp(&b_cmd.to_lowercase());
+        if asc {
+            ord
+        } else {
+            ord.reverse()
+        }
+    });
+
+    rows
+}
+
+fn render_filter_prompt(frame: &mut Frame, area: Rect, buffer: &str) {
+    let width = area.width.saturating_sub(4).min(60);
+    let height = 3;
+    let x = area.x + (area.width.saturating_sub(width)) / 2;
+    let y = area.y + (area.height.saturating_sub(height)) / 2;
+    let rect = Rect {
+        x,
+        y,
+        width,
+        height,
+    };
+
+    let text = format!("/ filter: {}", buffer);
+    let prompt = Paragraph::new(text)
+        .block(Block::default().borders(Borders::ALL).title("Filter"))
+        .style(Style::default().fg(Color::Yellow));
+    frame.render_widget(prompt, rect);
 }
 
 fn render_pie_legend(
