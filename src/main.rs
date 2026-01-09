@@ -4,15 +4,14 @@ mod helpers;
 mod history_file;
 mod init;
 mod logging;
+mod options;
 mod realtime_commands;
-
-use std::thread;
-use std::time::Duration;
 
 use analyze_commands::overview_analysis;
 use helpers::{detect_user_shell, is_history_read};
 use init::setup;
 use logging::{log_to_console, Status};
+use options::{prompt_user_option, ProgramOption};
 use realtime_commands::save_realtime_commands;
 
 fn main() {
@@ -53,6 +52,14 @@ fn main() {
 
     let _ = setup();
     detect_user_shell();
-    let _ = save_realtime_commands();
-    overview_analysis();
+
+    match prompt_user_option() {
+        ProgramOption::Overview => {
+            overview_analysis();
+        }
+        ProgramOption::Realtime => {
+            let _ = save_realtime_commands();
+        }
+        ProgramOption::Exit => {}
+    }
 }

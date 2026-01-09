@@ -1,4 +1,3 @@
-use notify::event::{DataChange, ModifyKind};
 use notify::{EventKind, RecursiveMode, Result, Watcher};
 use serde::Deserialize;
 use std::fs::File;
@@ -6,11 +5,13 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::mpsc::{channel, Receiver};
 use std::thread;
+use std::time::Duration;
 
 use crate::history_file::save_history_realtime;
 use crate::logging::{log_to_console, Status};
 
 /// Internal poller shared by polling & watcher
+#[warn(dead_code)]
 struct FilePoller {
     path: String,
     last_size: u64,
@@ -26,6 +27,26 @@ pub struct RealtimeLine {
 pub enum WatchEvent {
     Line(String),
     Error(std::io::Error),
+}
+
+fn handle_realtime_line(line: &str) {
+    let parsed: RealtimeLine = match serde_json::from_str(line) {
+        Ok(v) => v,
+        Err(e) => {
+            log_to_console(
+                &format!("Invalid realtime JSON: {} | {}", e, line),
+                Status::WARNING,
+            );
+            return;
+        }
+    };
+
+    if let Err(err) = save_history_realtime(&parsed.cmd, parsed.status, parsed.timestamp) {
+        log_to_console(
+            &format!("Failed to save realtime command: {}", err),
+            Status::ERROR,
+        );
+    }
 }
 
 impl FilePoller {
@@ -122,34 +143,57 @@ pub fn watch_cmdlog() -> Result<Receiver<WatchEvent>> {
     Ok(out_rx)
 }
 
+fn save_commands_on_poll() {
+    let path = format!(
+        "{}/Documents/playground/basket/.cmdlog.json",
+        std::env::var("HOME").expect("HOME not set")
+    );
+
+    let mut poller = match FilePoller::new(&path) {
+        Ok(poller) => poller,
+        Err(err) => {
+            log_to_console(
+                &format!("Realtime poller init failed: {}", err),
+                Status::ERROR,
+            );
+            return;
+        }
+    };
+
+    loop {
+        match poller.poll() {
+            Ok(lines) => {
+                for line in lines {
+                    handle_realtime_line(&line);
+                }
+            }
+            Err(err) => {
+                log_to_console(&format!("Realtime poll error: {}", err), Status::ERROR);
+            }
+        }
+
+        thread::sleep(Duration::from_millis(500));
+    }
+}
+
 pub fn save_realtime_commands() -> Result<()> {
     // Fails only if watcher cannot start
-    let rx = watch_cmdlog()?;
+    let rx = match watch_cmdlog() {
+        Ok(rx) => rx,
+        Err(err) => {
+            log_to_console(
+                &format!("Realtime watcher failed, falling back to polling: {}", err),
+                Status::WARNING,
+            );
+            save_commands_on_poll();
+            return Ok(());
+        }
+    };
 
     for event in rx {
         match event {
             WatchEvent::Line(line) => {
-                // Parse JSON line
-                let parsed: RealtimeLine = match serde_json::from_str(&line) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        log_to_console(
-                            &format!("Invalid realtime JSON: {} | {}", e, line),
-                            Status::WARNING,
-                        );
-                        continue;
-                    }
-                };
-
-                // Save to DB
-                if let Err(err) =
-                    save_history_realtime(&parsed.cmd, parsed.status, parsed.timestamp)
-                {
-                    log_to_console(
-                        &format!("Failed to save realtime command: {}", err),
-                        Status::ERROR,
-                    );
-                }
+                handle_realtime_line(&line);
             }
 
             WatchEvent::Error(err) => {
