@@ -47,7 +47,8 @@ pub fn create_db(conn: &Connection) -> Result<(), Box<dyn Error>> {
     date TEXT NOT NULL,
     command TEXT NOT NULL,
     status TEXT NOT NULL
-);",
+    );
+    ",
         [],
     ) {
         log_to_console(&format!("Failed to create table: {}", e), Status::ERROR);

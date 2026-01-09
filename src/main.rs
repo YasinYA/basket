@@ -6,10 +6,14 @@ mod init;
 mod logging;
 mod realtime_commands;
 
+use std::thread;
+use std::time::Duration;
+
 use analyze_commands::overview_analysis;
-use helpers::detect_user_shell;
+use helpers::{detect_user_shell, is_history_read};
 use init::setup;
 use logging::{log_to_console, Status};
+use realtime_commands::save_realtime_commands;
 
 fn main() {
     println!(
@@ -23,28 +27,32 @@ fn main() {
 
        "#
     );
-    // Connect to the database
-    match db::establish_connection() {
-        Ok(conn) => {
-            // Create the database and table if they don't exist
-            if let Err(e) = db::create_db(&conn) {
-                log_to_console(&format!("Failed to create database: {}", e), Status::ERROR);
-                return;
-            }
-            log_to_console("Database connection established.", Status::SUCCESS);
-        }
-        Err(e) => log_to_console(
-            &format!("Failed to establish database connection: {}", e),
-            Status::ERROR,
-        ),
-    }
-
+    // Only run this for the first time the program is run
+    // we know this by check if th db is empty
     // Load history from the file and insert it into the database
-    if let Err(e) = history_file::save_history() {
-        log_to_console(&format!("Failed to load history: {}", e), Status::ERROR);
+    if !is_history_read() {
+        // Connect to the database
+        match db::establish_connection() {
+            Ok(conn) => {
+                // Create the database and table if they don't exist
+                if let Err(e) = db::create_db(&conn) {
+                    log_to_console(&format!("Failed to create database: {}", e), Status::ERROR);
+                    return;
+                }
+                log_to_console("Database connection established.", Status::SUCCESS);
+            }
+            Err(e) => log_to_console(
+                &format!("Failed to establish database connection: {}", e),
+                Status::ERROR,
+            ),
+        }
+        if let Err(e) = history_file::save_history() {
+            log_to_console(&format!("Failed to load history: {}", e), Status::ERROR);
+        }
     }
 
     let _ = setup();
     detect_user_shell();
+    let _ = save_realtime_commands();
     overview_analysis();
 }

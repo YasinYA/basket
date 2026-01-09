@@ -25,3 +25,10 @@ pub fn max_distance(cmd: &str) -> usize {
         _ => 3,
     }
 }
+
+pub fn is_history_read() -> bool {
+    match crate::db::get_last_entry() {
+        Ok(_) => true,
+        Err(_) => false,
+    }
+}

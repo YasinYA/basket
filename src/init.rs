@@ -35,11 +35,15 @@ preexec() {
 }
 
 precmd() {
-  [[ -z "$__basket_cmd" ]] && return
   local exit_code=$?
-  local cmd_escaped=${__basket_cmd//\"/\\\"}
-  printf '{"cmd":"%s","status":%d}\n' "$cmd_escaped" "$exit_code" >> "$CMDLOG_FILE"
+  local ts=$(date +%s)
+  local cmd="$__basket_cmd"
   unset __basket_cmd
+
+  [[ -z "$cmd" ]] && return
+
+  local cmd_escaped=${cmd//\"/\\\"}
+  printf '{"cmd":"%s","status":%d, "timestamp":%d}\n' "$cmd_escaped" "$exit_code" "$ts" >> "$CMDLOG_FILE"
 }
 "#;
 
@@ -57,8 +61,9 @@ fn setup_bash() -> std::io::Result<()> {
 export PROMPT_COMMAND='
 history -a
 status=$?
+ts=$(date +%s)
 cmd=$(history 1 | sed "s/^[ ]*[0-9]\+[ ]*//")
-printf "{\"cmd\":\"%s\",\"status\":%d}\n" "$cmd" "$status" >> ~/.cmdlog.json
+printf "{\"cmd\":\"%s\",\"status\":%d},\"timestamp\":%d\n" "$cmd" "$status" "$ts" >> ~/.cmdlog.json
 '
 "#;
 

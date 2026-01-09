@@ -1,4 +1,4 @@
-use crate::db::{get_last_entry, insert_history_entry, Entry};
+use crate::db::{get_last_entry, insert_history_entry, CommandStatus, Entry};
 use chrono::{TimeZone, Utc};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -6,7 +6,6 @@ use uuid::Uuid;
 
 use crate::helpers::{detect_user_shell, ShellType};
 use crate::logging::{log_to_console, Status};
-use crate::realtime_commands::watch_cmdlog;
 
 fn load_history_from_zsh(
     line: &str,
@@ -53,7 +52,6 @@ fn load_history_from_bash(
 }
 
 fn load_history_data() -> Result<Vec<(i64, String)>, Box<dyn std::error::Error>> {
-    watch_cmdlog();
     let active_shell = detect_user_shell();
     let parser: fn(&str, &mut Vec<(i64, String)>, &mut Option<i64>) = match active_shell {
         ShellType::ZSH(_) => load_history_from_zsh,
@@ -136,6 +134,38 @@ pub fn save_history() -> Result<(), Box<dyn std::error::Error>> {
         Err(err) => {
             log_to_console(&format!("Failed to load history: {}", err), Status::ERROR);
         }
+    }
+
+    Ok(())
+}
+
+pub fn save_history_realtime(
+    command: &str,
+    status: i32,
+    timestamp: i64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Convert UNIX timestamp → UTC datetime
+    let datetime_utc = Utc
+        .timestamp_opt(timestamp, 0)
+        .single()
+        .ok_or("Invalid timestamp")?;
+
+    let formatted_datetime = datetime_utc.format("%Y-%m-%d %H:%M:%S").to_string();
+
+    // Map exit code → CommandStatus
+    let command_status = match status {
+        0 => Some(CommandStatus::Success),
+        code if code > 0 => Some(CommandStatus::Error(code)),
+        _ => Some(CommandStatus::Unknown),
+    };
+
+    // Insert into DB
+    if let Err(err) = insert_history_entry(&timestamp, command, &formatted_datetime, command_status)
+    {
+        log_to_console(
+            &format!("Failed to insert history entry: {}", err),
+            Status::ERROR,
+        );
     }
 
     Ok(())
