@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use strsim::levenshtein;
 use terminal_emoji::Emoji;
 
-use crate::db::{get_all_history_entries, Entry};
+use crate::db::{get_all_history_entries, CommandStatus, Entry};
 use crate::helpers::max_distance;
 use crate::logging::{log_table_to_console, log_to_console, Status};
 
@@ -35,6 +35,25 @@ fn top_5_most_used_commands(entries: &Vec<Entry>) -> Vec<Vec<String>> {
     }
 
     top_5
+}
+
+fn top_5_most_unsuccessful_commands(entries: &Vec<Entry>) -> Vec<Vec<String>> {
+    let mut occurrences: HashMap<String, i32> = HashMap::new();
+
+    for entry in entries {
+        if let CommandStatus::Error(_) = entry.status {
+            *occurrences.entry(entry.command.clone()).or_insert(0) += 1;
+        }
+    }
+
+    let mut sorted: Vec<(String, i32)> = occurrences.into_iter().collect();
+    sorted.sort_by(|a, b| b.1.cmp(&a.1));
+
+    sorted
+        .into_iter()
+        .take(5)
+        .map(|(cmd, count)| vec![cmd, count.to_string()])
+        .collect()
 }
 
 fn most_misstyped_command(entries: &Vec<Entry>) -> Vec<Vec<String>> {
@@ -99,12 +118,19 @@ pub fn overview_analysis() {
     match get_all_history_entries() {
         Ok(entries) => {
             let top_commands = top_5_most_used_commands(&entries);
+            let top_unsuccessful = top_5_most_unsuccessful_commands(&entries);
             let mistyped_commands = most_misstyped_command(&entries);
 
             log_table_to_console(
                 "Command Occurrences",
                 Emoji::new("🔢", "Occurrence"),
                 &top_commands,
+            );
+            println!("\n\n");
+            log_table_to_console(
+                "Most Unsuccessful Commands",
+                Emoji::new("💥", "Failure"),
+                &top_unsuccessful,
             );
             println!("\n\n");
             log_table_to_console(
