@@ -8,11 +8,14 @@ chrono = "0.4"
 colored = "3.0.0"
 envvars = "0.1.10"
 notify = "8.2.0"
+ratatui = { version = "0.29", features = ["all-widgets"] }
+crossterm = "0.27"
 rusqlite = { version = "0.37.0", features = ["bundled"] }
 serde = "1.0.228"
 serde_json = "1.0.149"
 strsim = "0.11.1"
 terminal-emoji = "0.4.1"
+tui-piechart = "0.2.8"
 [dependencies.uuid]
 version = "1.18.1"
 # Lets you generate random UUIDs

@@ -28,6 +28,7 @@ pub fn log_to_console(message: &str, status: Status) {
     println!("{}", text);
 }
 
+#[allow(dead_code)]
 pub fn log_table_to_console(title: &str, emoji: Emoji, data: &[Vec<String>]) {
     println!("{} {}", emoji, title);
     for _ in 0..title.len() * 3 {

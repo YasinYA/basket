@@ -4,15 +4,14 @@ mod helpers;
 mod history_file;
 mod init;
 mod logging;
-mod options;
 mod realtime_commands;
+mod tui_app;
 
-use analyze_commands::overview_analysis;
 use helpers::{detect_user_shell, is_history_read};
 use init::setup;
 use logging::{log_to_console, Status};
-use options::{prompt_user_option, ProgramOption};
 use realtime_commands::save_realtime_commands;
+use tui_app::{run as run_tui, TuiExit};
 
 fn main() {
     println!(
@@ -53,13 +52,13 @@ fn main() {
     let _ = setup();
     detect_user_shell();
 
-    match prompt_user_option() {
-        ProgramOption::Overview => {
-            overview_analysis();
-        }
-        ProgramOption::Realtime => {
+    match run_tui() {
+        Ok(TuiExit::StartRealtime) => {
             let _ = save_realtime_commands();
         }
-        ProgramOption::Exit => {}
+        Ok(TuiExit::Exit) => {}
+        Err(err) => {
+            log_to_console(&format!("TUI failed: {}", err), Status::ERROR);
+        }
     }
 }

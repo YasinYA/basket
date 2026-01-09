@@ -6,7 +6,7 @@ use crate::db::{get_all_history_entries, CommandStatus, Entry};
 use crate::helpers::max_distance;
 use crate::logging::{log_table_to_console, log_to_console, Status};
 
-fn calculate_command_occurance(command: &String, entries: &Vec<Entry>) -> i32 {
+fn calculate_command_occurance(command: &String, entries: &[Entry]) -> i32 {
     let mut count: i32 = 0;
 
     for entry in entries.iter() {
@@ -17,7 +17,7 @@ fn calculate_command_occurance(command: &String, entries: &Vec<Entry>) -> i32 {
     count
 }
 
-fn top_5_most_used_commands(entries: &Vec<Entry>) -> Vec<Vec<String>> {
+fn top_5_most_used_commands(entries: &[Entry]) -> Vec<Vec<String>> {
     let mut top_5: Vec<Vec<String>> = Vec::new();
     let mut occurrences: HashMap<String, i32> = HashMap::new();
 
@@ -37,7 +37,7 @@ fn top_5_most_used_commands(entries: &Vec<Entry>) -> Vec<Vec<String>> {
     top_5
 }
 
-fn top_5_most_unsuccessful_commands(entries: &Vec<Entry>) -> Vec<Vec<String>> {
+fn top_5_most_unsuccessful_commands(entries: &[Entry]) -> Vec<Vec<String>> {
     let mut occurrences: HashMap<String, i32> = HashMap::new();
 
     for entry in entries {
@@ -56,7 +56,7 @@ fn top_5_most_unsuccessful_commands(entries: &Vec<Entry>) -> Vec<Vec<String>> {
         .collect()
 }
 
-fn most_misstyped_command(entries: &Vec<Entry>) -> Vec<Vec<String>> {
+fn most_misstyped_command(entries: &[Entry]) -> Vec<Vec<String>> {
     // Extract command names only
     let common_commands: Vec<String> = top_5_most_used_commands(entries)
         .into_iter()
@@ -114,29 +114,26 @@ fn most_misstyped_command(entries: &Vec<Entry>) -> Vec<Vec<String>> {
     rows
 }
 
+#[allow(dead_code)]
 pub fn overview_analysis() {
-    match get_all_history_entries() {
-        Ok(entries) => {
-            let top_commands = top_5_most_used_commands(&entries);
-            let top_unsuccessful = top_5_most_unsuccessful_commands(&entries);
-            let mistyped_commands = most_misstyped_command(&entries);
-
+    match get_overview_tables() {
+        Ok(tables) => {
             log_table_to_console(
                 "Command Occurrences",
                 Emoji::new("🔢", "Occurrence"),
-                &top_commands,
+                &tables.top_commands,
             );
             println!("\n\n");
             log_table_to_console(
                 "Most Unsuccessful Commands",
                 Emoji::new("💥", "Failure"),
-                &top_unsuccessful,
+                &tables.top_unsuccessful,
             );
             println!("\n\n");
             log_table_to_console(
                 "Most Mistyped Commands",
                 Emoji::new("💬", "Miss Type"),
-                &mistyped_commands,
+                &tables.mistyped_commands,
             );
         }
         Err(e) => {
@@ -146,4 +143,20 @@ pub fn overview_analysis() {
             );
         }
     }
+}
+
+pub struct OverviewTables {
+    pub top_commands: Vec<Vec<String>>,
+    pub top_unsuccessful: Vec<Vec<String>>,
+    pub mistyped_commands: Vec<Vec<String>>,
+}
+
+pub fn get_overview_tables() -> Result<OverviewTables, Box<dyn std::error::Error>> {
+    let entries = get_all_history_entries()?;
+
+    Ok(OverviewTables {
+        top_commands: top_5_most_used_commands(&entries),
+        top_unsuccessful: top_5_most_unsuccessful_commands(&entries),
+        mistyped_commands: most_misstyped_command(&entries),
+    })
 }
