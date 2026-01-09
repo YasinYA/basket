@@ -18,6 +18,60 @@ use tui_piechart::{symbols, PieChart, PieSlice, Resolution};
 
 use crate::analyze_commands::{get_overview_tables, OverviewTables};
 
+struct Theme {
+    gold: Color,
+    gold_bright: Color,
+    menu_inactive: Color,
+    menu_active: Color,
+    menu_border: Color,
+    footer_border: Color,
+    header_text: Color,
+    table_border: Color,
+    table_header: Color,
+    table_row_even: Color,
+    table_row_odd: Color,
+    table_active_bg: Color,
+    table_active_fg: Color,
+    logo_colors: [Color; 6],
+    chart_palette: [Color; 6],
+    legend_text: Color,
+    legend_dim: Color,
+}
+
+const THEME: Theme = Theme {
+    gold: Color::Rgb(212, 175, 55),
+    gold_bright: Color::Rgb(255, 215, 0),
+    menu_inactive: Color::White,
+    menu_active: Color::Rgb(212, 175, 55),
+    menu_border: Color::Rgb(212, 175, 55),
+    footer_border: Color::Rgb(212, 175, 55),
+    header_text: Color::Blue,
+    table_border: Color::Rgb(212, 175, 55),
+    table_header: Color::Cyan,
+    table_row_even: Color::White,
+    table_row_odd: Color::Gray,
+    table_active_bg: Color::Rgb(212, 175, 55),
+    table_active_fg: Color::White,
+    logo_colors: [
+        Color::Rgb(255, 215, 0),
+        Color::Rgb(244, 200, 79),
+        Color::Rgb(212, 175, 55),
+        Color::Rgb(200, 160, 60),
+        Color::Rgb(212, 175, 55),
+        Color::Rgb(244, 200, 79),
+    ],
+    chart_palette: [
+        Color::Rgb(56, 189, 248),
+        Color::Rgb(34, 197, 94),
+        Color::Rgb(250, 204, 21),
+        Color::Rgb(244, 114, 182),
+        Color::Rgb(59, 130, 246),
+        Color::Rgb(251, 146, 60),
+    ],
+    legend_text: Color::Gray,
+    legend_dim: Color::DarkGray,
+};
+
 pub enum TuiExit {
     Exit,
     StartRealtime,
@@ -322,37 +376,36 @@ fn render_menu(frame: &mut Frame, items: &[&str], selected: usize, logo_phase: u
         ])
         .split(size);
 
-    let powered_by = Paragraph::new("Powered by")
+    let powered_by = Paragraph::new("Get insightful view from what you type everyday")
         .style(
             Style::default()
-                .fg(Color::Blue)
+                .fg(THEME.header_text)
                 .add_modifier(Modifier::BOLD),
         )
-        .block(Block::default().borders(Borders::ALL).title("Basket"));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Basket")
+                .border_style(Style::default().fg(THEME.gold)),
+        );
 
     let logo = Paragraph::new(basket_logo_text(logo_phase)).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Yellow)),
+            .border_style(Style::default().fg(THEME.gold)),
     );
 
     let list_items: Vec<ListItem> = items
         .iter()
         .enumerate()
         .map(|(idx, item)| {
-            let colors = [
-                Color::Rgb(56, 189, 248),
-                Color::Rgb(34, 197, 94),
-                Color::Rgb(250, 204, 21),
-            ];
-            let base = colors[idx % colors.len()];
             let prefix = if idx == selected { "> " } else { "  " };
             let item_style = if idx == selected {
                 Style::default()
-                    .fg(brighten_color(base, 40))
+                    .fg(THEME.menu_active)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(base)
+                Style::default().fg(THEME.menu_inactive)
             };
             ListItem::new(Line::from(vec![
                 Span::styled(prefix, item_style),
@@ -366,7 +419,7 @@ fn render_menu(frame: &mut Frame, items: &[&str], selected: usize, logo_phase: u
             Block::default()
                 .borders(Borders::ALL)
                 .title("Menu")
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(THEME.menu_border)),
         )
         .highlight_style(Style::default());
 
@@ -374,9 +427,9 @@ fn render_menu(frame: &mut Frame, items: &[&str], selected: usize, logo_phase: u
         .block(
             Block::default()
                 .borders(Borders::TOP)
-                .border_style(Style::default().fg(Color::Blue)),
+                .border_style(Style::default().fg(THEME.footer_border)),
         )
-        .style(Style::default().fg(Color::Blue));
+        .style(Style::default().fg(THEME.footer_border));
 
     frame.render_widget(powered_by, chunks[0]);
     frame.render_widget(logo, chunks[1]);
@@ -487,8 +540,12 @@ fn render_overview(
             }
         }
     } else {
-        let empty = Paragraph::new("No overview data.")
-            .block(Block::default().borders(Borders::ALL).title("Overview"));
+        let empty = Paragraph::new("No overview data.").block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Overview")
+                .border_style(Style::default().fg(THEME.gold)),
+        );
         frame.render_widget(empty, layout[0]);
     }
 
@@ -507,7 +564,11 @@ fn render_overview(
             "t: tables  c: charts  ←/→: chart  ↑/↓: slice  b: back  q: quit",
         ),
     }
-    .block(Block::default().borders(Borders::TOP));
+    .block(
+        Block::default()
+            .borders(Borders::TOP)
+            .border_style(Style::default().fg(THEME.footer_border)),
+    );
     frame.render_widget(footer, layout[1]);
 
     if filter_input {
@@ -517,7 +578,10 @@ fn render_overview(
 
 fn render_error(frame: &mut Frame, message: &str) {
     let size = frame.area();
-    let block = Block::default().borders(Borders::ALL).title("Error");
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title("Error")
+        .border_style(Style::default().fg(THEME.gold));
     let paragraph = Paragraph::new(message)
         .block(block)
         .style(Style::default().fg(Color::Red));
@@ -544,7 +608,7 @@ fn render_table(
             "─".repeat(col1_width.max(1)),
             "─".repeat(col2_width.max(1)),
         ])
-        .style(Style::default().fg(Color::Blue));
+        .style(Style::default().fg(THEME.table_border));
 
         let mut out = Vec::with_capacity(data.len() + 1);
         out.push(separator);
@@ -554,11 +618,11 @@ fn render_table(
             let right = row.get(1).cloned().unwrap_or_default();
             let style = if idx % 2 == 0 {
                 Style::default()
-                    .fg(Color::White)
+                    .fg(THEME.table_row_even)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
-                    .fg(Color::Gray)
+                    .fg(THEME.table_row_odd)
                     .add_modifier(Modifier::BOLD)
             };
             if is_focused && idx == selected {
@@ -586,7 +650,7 @@ fn render_table(
     let header = Row::new(vec!["Command", "Count"])
         .style(
             Style::default()
-                .fg(Color::Cyan)
+                .fg(THEME.table_header)
                 .add_modifier(Modifier::BOLD),
         )
         .height(3)
@@ -601,13 +665,13 @@ fn render_table(
         Block::default()
             .borders(Borders::ALL)
             .title(title)
-            .border_style(Style::default().fg(Color::Blue)),
+            .border_style(Style::default().fg(THEME.table_border)),
     )
     .column_spacing(3)
     .row_highlight_style(
         Style::default()
-            .fg(Color::Yellow)
-            .bg(Color::Gray)
+            .fg(THEME.table_active_fg)
+            .bg(THEME.table_active_bg)
             .add_modifier(Modifier::BOLD),
     )
     .highlight_symbol("");
@@ -634,8 +698,13 @@ fn render_chart(
 ) {
     if data.is_empty() {
         let empty = Paragraph::new("No data")
-            .block(Block::default().borders(Borders::ALL).title(title))
-            .style(Style::default().fg(Color::DarkGray));
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(title)
+                    .border_style(Style::default().fg(THEME.gold)),
+            )
+            .style(Style::default().fg(THEME.legend_dim));
         frame.render_widget(empty, area);
         return;
     }
@@ -666,14 +735,7 @@ fn render_chart(
         values.push(value);
     }
 
-    let colors = [
-        Color::Rgb(56, 189, 248),
-        Color::Rgb(34, 197, 94),
-        Color::Rgb(250, 204, 21),
-        Color::Rgb(244, 114, 182),
-        Color::Rgb(59, 130, 246),
-        Color::Rgb(251, 146, 60),
-    ];
+    let colors = THEME.chart_palette;
 
     let anim = progress.clamp(0.05, 1.0) as f64;
     let slices: Vec<PieSlice<'_>> = labels
@@ -692,7 +754,12 @@ fn render_chart(
         .collect();
 
     let piechart = PieChart::new(slices)
-        .block(Block::default().borders(Borders::ALL).title(title))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(title)
+                .border_style(Style::default().fg(THEME.gold)),
+        )
         .show_legend(false)
         .show_percentages(false)
         .legend_marker(symbols::LEGEND_MARKER_CIRCLE)
@@ -828,8 +895,13 @@ fn render_filter_prompt(frame: &mut Frame, area: Rect, buffer: &str) {
 
     let text = format!("/ filter: {}", buffer);
     let prompt = Paragraph::new(text)
-        .block(Block::default().borders(Borders::ALL).title("Filter"))
-        .style(Style::default().fg(Color::Yellow));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Filter")
+                .border_style(Style::default().fg(THEME.gold)),
+        )
+        .style(Style::default().fg(THEME.gold_bright));
     frame.render_widget(prompt, rect);
 }
 
@@ -886,7 +958,7 @@ fn render_pie_legend(
                     .fg(brighten_color(color, 40))
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::Gray)
+                Style::default().fg(THEME.legend_text)
             };
 
             let trimmed_label: String = label.chars().take(max_label).collect();
@@ -905,20 +977,17 @@ fn render_pie_legend(
     } else {
         "Legend".to_string()
     };
-    let legend = Paragraph::new(Text::from(lines))
-        .block(Block::default().borders(Borders::ALL).title(title));
+    let legend = Paragraph::new(Text::from(lines)).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .border_style(Style::default().fg(THEME.gold)),
+    );
     frame.render_widget(legend, area);
 }
 
 fn basket_logo_text(phase: usize) -> Text<'static> {
-    let colors = [
-        Color::Rgb(56, 189, 248),
-        Color::Rgb(14, 165, 233),
-        Color::Rgb(2, 132, 199),
-        Color::Rgb(3, 105, 161),
-        Color::Rgb(2, 132, 199),
-        Color::Rgb(14, 165, 233),
-    ];
+    let colors = THEME.logo_colors;
 
     let lines = [
         "░████████      ░███      ░██████   ░██     ░██ ░██████████ ░██████████",
