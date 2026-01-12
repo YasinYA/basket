@@ -1,9 +1,8 @@
 # Basket
 
-[![CI](https://github.com/YasinYA/basket/actions/workflows/ci.yml/badge.svg)](https://github.com/YasinYA/basket/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/YasinYA/basket/branch/main/graph/badge.svg)](https://codecov.io/gh/YasinYA/basket)
+[![CI](https://github.com/YasinYA/basket/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/YasinYA/basket/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Crates.io](https://img.shields.io/crates/v/basket.svg)](https://crates.io/crates/basket)
+[![Crates.io](https://img.shields.io/badge/crate-1.0.0-blue.svg)](https://crates.io/crates/basket)
 
 Basket is a local TUI for understanding your shell history and spotting risky command patterns. It ingests your command history, shows overview analytics, and runs a lightweight rule-based IDS to flag suspicious activity with explanations.
 
@@ -13,6 +12,12 @@ Basket is a local TUI for understanding your shell history and spotting risky co
 - Realtime watcher: keep history streaming and dashboards fresh
 - Rule-driven intrusion detection with score and reasons
 - Local-only data: no network required
+
+## Screenshots
+
+![Overview tables](assets/overview.png)
+![Charts view](assets/charts.png)
+![Watcher running](assets/watcher.png)
 
 ## Quick Start
 

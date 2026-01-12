@@ -16,11 +16,3 @@ jobs:
         run: cargo check
       - name: Test
         run: cargo test
-      - name: Install cargo-llvm-cov
-        run: cargo install cargo-llvm-cov --locked
-      - name: Coverage
-        run: cargo llvm-cov --lcov --output-path lcov.info
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        with:
-          files: lcov.info
