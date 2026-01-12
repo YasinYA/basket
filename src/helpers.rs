@@ -32,3 +32,9 @@ pub fn is_history_read() -> bool {
         Err(_) => false,
     }
 }
+
+pub fn current_user() -> String {
+    std::env::var("USER")
+        .or_else(|_| std::env::var("LOGNAME"))
+        .unwrap_or_else(|_| "unknown".to_string())
+}

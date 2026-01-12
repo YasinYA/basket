@@ -2,6 +2,7 @@ mod analyze_commands;
 mod db;
 mod helpers;
 mod history_file;
+mod ids;
 mod init;
 mod logging;
 mod realtime_commands;
@@ -10,7 +11,6 @@ mod tui_app;
 use helpers::{detect_user_shell, is_history_read};
 use init::setup;
 use logging::{log_to_console, Status};
-use realtime_commands::save_realtime_commands;
 use tui_app::{run as run_tui, TuiExit};
 
 fn main() {
@@ -37,6 +37,10 @@ fn main() {
                     log_to_console(&format!("Failed to create database: {}", e), Status::ERROR);
                     return;
                 }
+                if let Err(e) = db::ensure_user_column(&conn) {
+                    log_to_console(&format!("Failed to update schema: {}", e), Status::ERROR);
+                    return;
+                }
                 log_to_console("Database connection established.", Status::SUCCESS);
             }
             Err(e) => log_to_console(
@@ -49,13 +53,16 @@ fn main() {
         }
     }
 
+    if let Ok(conn) = db::establish_connection() {
+        if let Err(e) = db::ensure_user_column(&conn) {
+            log_to_console(&format!("Failed to update schema: {}", e), Status::ERROR);
+        }
+    }
+
     let _ = setup();
     detect_user_shell();
 
     match run_tui() {
-        Ok(TuiExit::StartRealtime) => {
-            let _ = save_realtime_commands();
-        }
         Ok(TuiExit::Exit) => {}
         Err(err) => {
             log_to_console(&format!("TUI failed: {}", err), Status::ERROR);

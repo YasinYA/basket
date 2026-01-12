@@ -1,7 +1,9 @@
 use std::error::Error;
 use std::io;
+use std::thread;
 use std::time::{Duration, Instant};
 
+use chrono::Utc;
 use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode};
 use crossterm::execute;
 use crossterm::terminal::{
@@ -12,11 +14,14 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::prelude::Frame;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Row, Table, TableState};
+use ratatui::widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table, TableState};
 use ratatui::Terminal;
 use tui_piechart::{symbols, PieChart, PieSlice, Resolution};
 
 use crate::analyze_commands::{get_overview_tables, OverviewTables};
+use crate::db::{get_recent_entries, CommandStatus, Entry};
+use crate::ids::{detect_intrusions, IntrusionFinding};
+use crate::realtime_commands::save_realtime_commands;
 
 struct Theme {
     gold: Color,
@@ -39,34 +44,34 @@ struct Theme {
 }
 
 const THEME: Theme = Theme {
-    gold: Color::Rgb(212, 175, 55),
-    gold_bright: Color::Rgb(255, 215, 0),
+    gold: Color::Rgb(148, 92, 255),
+    gold_bright: Color::Rgb(200, 160, 255),
     menu_inactive: Color::White,
-    menu_active: Color::Rgb(212, 175, 55),
-    menu_border: Color::Rgb(212, 175, 55),
-    footer_border: Color::Rgb(212, 175, 55),
-    header_text: Color::Blue,
-    table_border: Color::Rgb(212, 175, 55),
-    table_header: Color::Cyan,
+    menu_active: Color::Rgb(148, 92, 255),
+    menu_border: Color::Rgb(148, 92, 255),
+    footer_border: Color::Rgb(148, 92, 255),
+    header_text: Color::Rgb(186, 147, 255),
+    table_border: Color::Rgb(148, 92, 255),
+    table_header: Color::Rgb(190, 160, 255),
     table_row_even: Color::White,
     table_row_odd: Color::Gray,
-    table_active_bg: Color::Rgb(212, 175, 55),
+    table_active_bg: Color::Rgb(148, 92, 255),
     table_active_fg: Color::White,
     logo_colors: [
-        Color::Rgb(255, 215, 0),
-        Color::Rgb(244, 200, 79),
-        Color::Rgb(212, 175, 55),
-        Color::Rgb(200, 160, 60),
-        Color::Rgb(212, 175, 55),
-        Color::Rgb(244, 200, 79),
+        Color::Rgb(210, 185, 255),
+        Color::Rgb(186, 147, 255),
+        Color::Rgb(164, 110, 255),
+        Color::Rgb(148, 92, 255),
+        Color::Rgb(164, 110, 255),
+        Color::Rgb(186, 147, 255),
     ],
     chart_palette: [
-        Color::Rgb(56, 189, 248),
-        Color::Rgb(34, 197, 94),
-        Color::Rgb(250, 204, 21),
-        Color::Rgb(244, 114, 182),
-        Color::Rgb(59, 130, 246),
-        Color::Rgb(251, 146, 60),
+        Color::Rgb(148, 92, 255),
+        Color::Rgb(98, 76, 255),
+        Color::Rgb(186, 147, 255),
+        Color::Rgb(230, 180, 255),
+        Color::Rgb(122, 102, 255),
+        Color::Rgb(200, 160, 255),
     ],
     legend_text: Color::Gray,
     legend_dim: Color::DarkGray,
@@ -74,12 +79,12 @@ const THEME: Theme = Theme {
 
 pub enum TuiExit {
     Exit,
-    StartRealtime,
 }
 
 enum Screen {
     Menu,
     Overview,
+    Watcher,
     Error(String),
 }
 
@@ -105,6 +110,11 @@ struct AppState {
     filter_query: String,
     filter_input: bool,
     filter_buffer: String,
+    watcher_started: bool,
+    watcher_spinner: usize,
+    recent_rows: Vec<Vec<String>>,
+    intrusion_rows: Vec<Vec<String>>,
+    last_refresh: Instant,
 }
 
 impl AppState {
@@ -125,6 +135,11 @@ impl AppState {
             filter_query: String::new(),
             filter_input: false,
             filter_buffer: String::new(),
+            watcher_started: false,
+            watcher_spinner: 0,
+            recent_rows: Vec::new(),
+            intrusion_rows: Vec::new(),
+            last_refresh: Instant::now(),
         }
     }
 }
@@ -154,9 +169,10 @@ fn run_loop(
 ) -> Result<TuiExit, Box<dyn Error>> {
     let menu_items = ["View overview", "Start realtime watcher", "Exit"];
     let mut app = AppState::new();
-    let mut exit_action = TuiExit::Exit;
+    let exit_action = TuiExit::Exit;
 
     let tick_rate = Duration::from_millis(120);
+    let refresh_rate = Duration::from_secs(1);
 
     loop {
         if app.last_tick.elapsed() >= tick_rate {
@@ -166,6 +182,17 @@ fn run_loop(
                 && app.chart_progress < 1.0
             {
                 app.chart_progress = (app.chart_progress + 0.08).min(1.0);
+            }
+            if matches!(app.screen, Screen::Overview)
+                && app.watcher_started
+                && app.last_refresh.elapsed() >= refresh_rate
+            {
+                if let Err(err) = refresh_overview_state(&mut app) {
+                    app.screen = Screen::Error(err);
+                }
+            }
+            if matches!(app.screen, Screen::Watcher) {
+                app.watcher_spinner = (app.watcher_spinner + 1) % spinner_frames().len();
             }
             app.last_tick = Instant::now();
         }
@@ -185,7 +212,10 @@ fn run_loop(
                 app.sort_asc,
                 app.filter_input,
                 &app.filter_buffer,
+                &app.recent_rows,
+                &app.intrusion_rows,
             ),
+            Screen::Watcher => render_watcher(frame, app.watcher_spinner),
             Screen::Error(message) => render_error(frame, message),
         })?;
 
@@ -229,19 +259,21 @@ fn run_loop(
                             app.menu_index = (app.menu_index + 1) % menu_items.len();
                         }
                         KeyCode::Enter => match app.menu_index {
-                            0 => match get_overview_tables() {
-                                Ok(tables) => {
-                                    app.overview = Some(tables);
+                            0 => {
+                                if let Err(err) = refresh_overview_state(&mut app) {
+                                    app.screen = Screen::Error(err);
+                                } else {
                                     app.screen = Screen::Overview;
                                 }
-                                Err(err) => {
-                                    app.screen =
-                                        Screen::Error(format!("Failed to load overview: {}", err));
-                                }
-                            },
+                            }
                             1 => {
-                                exit_action = TuiExit::StartRealtime;
-                                return Ok(exit_action);
+                                app.screen = Screen::Watcher;
+                                if !app.watcher_started {
+                                    app.watcher_started = true;
+                                    thread::spawn(|| {
+                                        let _ = save_realtime_commands();
+                                    });
+                                }
                             }
                             _ => return Ok(exit_action),
                         },
@@ -351,6 +383,13 @@ fn run_loop(
                         KeyCode::Char('q') => return Ok(exit_action),
                         _ => {}
                     },
+                    Screen::Watcher => match key.code {
+                        KeyCode::Char('b') => {
+                            app.screen = Screen::Menu;
+                        }
+                        KeyCode::Char('q') => return Ok(exit_action),
+                        _ => {}
+                    },
                     Screen::Error(_) => match key.code {
                         KeyCode::Char('b') => {
                             app.screen = Screen::Menu;
@@ -450,11 +489,18 @@ fn render_overview(
     sort_asc: bool,
     filter_input: bool,
     filter_buffer: &str,
+    recent_rows: &[Vec<String>],
+    intrusion_rows: &[Vec<String>],
 ) {
     let size = frame.area();
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(10), Constraint::Length(3)])
+        .constraints([
+            Constraint::Min(10),
+            Constraint::Length(10),
+            Constraint::Length(10),
+            Constraint::Length(3),
+        ])
         .split(size);
 
     if let Some(tables) = tables {
@@ -549,6 +595,9 @@ fn render_overview(
         frame.render_widget(empty, layout[0]);
     }
 
+    render_recent_table(frame, layout[1], recent_rows);
+    render_intrusion_table(frame, layout[2], intrusion_rows);
+
     let sort_label = if sort_asc { "A->Z" } else { "Z->A" };
     let filter_label = if filter_query.is_empty() {
         "none"
@@ -569,7 +618,7 @@ fn render_overview(
             .borders(Borders::TOP)
             .border_style(Style::default().fg(THEME.footer_border)),
     );
-    frame.render_widget(footer, layout[1]);
+    frame.render_widget(footer, layout[3]);
 
     if filter_input {
         render_filter_prompt(frame, layout[0], filter_buffer);
@@ -586,6 +635,48 @@ fn render_error(frame: &mut Frame, message: &str) {
         .block(block)
         .style(Style::default().fg(Color::Red));
     frame.render_widget(paragraph, size);
+}
+
+fn render_watcher(frame: &mut Frame, spinner_index: usize) {
+    let size = frame.area();
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(5), Constraint::Length(3)])
+        .split(size);
+
+    let spinner = spinner_frames()[spinner_index];
+    let content = format!(
+        "{}  Realtime watcher is running\nListening for new commands...",
+        spinner
+    );
+
+    let body = Paragraph::new(content)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Watcher")
+                .border_style(Style::default().fg(THEME.gold)),
+        )
+        .style(
+            Style::default()
+                .fg(THEME.menu_inactive)
+                .add_modifier(Modifier::BOLD),
+        );
+
+    let footer = Paragraph::new("b: back  q: quit")
+        .block(
+            Block::default()
+                .borders(Borders::TOP)
+                .border_style(Style::default().fg(THEME.footer_border)),
+        )
+        .style(Style::default().fg(THEME.footer_border));
+
+    frame.render_widget(body, chunks[0]);
+    frame.render_widget(footer, chunks[1]);
+}
+
+fn spinner_frames() -> [&'static str; 10] {
+    ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 }
 
 fn render_table(
@@ -905,6 +996,119 @@ fn render_filter_prompt(frame: &mut Frame, area: Rect, buffer: &str) {
     frame.render_widget(prompt, rect);
 }
 
+fn render_recent_table(frame: &mut Frame, area: Rect, data: &[Vec<String>]) {
+    let rows: Vec<Row> = if data.is_empty() {
+        vec![Row::new(vec![
+            "No recent commands".to_string(),
+            "".to_string(),
+            "".to_string(),
+        ])]
+    } else {
+        data.iter()
+            .map(|row| {
+                let cmd = row.get(0).cloned().unwrap_or_default();
+                let status = row.get(1).cloned().unwrap_or_default();
+                let when = row.get(2).cloned().unwrap_or_default();
+                Row::new(vec![cmd, status, when]).height(1)
+            })
+            .collect()
+    };
+
+    let header = Row::new(vec!["Command", "Status", "When"])
+        .style(
+            Style::default()
+                .fg(THEME.table_header)
+                .add_modifier(Modifier::BOLD),
+        )
+        .height(1);
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Percentage(55),
+            Constraint::Percentage(20),
+            Constraint::Percentage(25),
+        ],
+    )
+    .header(header)
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Recent Commands")
+            .border_style(Style::default().fg(THEME.table_border)),
+    )
+    .column_spacing(2);
+
+    frame.render_widget(table, area);
+}
+
+fn render_intrusion_table(frame: &mut Frame, area: Rect, data: &[Vec<String>]) {
+    let rows: Vec<Row> = if data.is_empty() {
+        vec![Row::new(vec![
+            Cell::new(""),
+            Cell::new("No suspicious commands detected"),
+            Cell::new(""),
+            Cell::new(""),
+            Cell::new(""),
+            Cell::new(""),
+        ])]
+    } else {
+        data.iter()
+            .map(|row| {
+                let cmd = row.get(0).cloned().unwrap_or_default();
+                let score_str = row.get(1).cloned().unwrap_or_default();
+                let user = row.get(2).cloned().unwrap_or_default();
+                let reason = row.get(3).cloned().unwrap_or_default();
+                let when = row.get(4).cloned().unwrap_or_default();
+                let score = score_str.parse::<i32>().unwrap_or(0);
+                let indicator = Cell::from(Span::styled(
+                    "■",
+                    Style::default().fg(score_to_color(score)),
+                ));
+                Row::new(vec![
+                    indicator,
+                    Cell::new(cmd),
+                    Cell::new(score_str),
+                    Cell::new(user),
+                    Cell::new(reason),
+                    Cell::new(when),
+                ])
+                .height(1)
+            })
+            .collect()
+    };
+
+    let header = Row::new(vec!["", "Command", "Score", "User", "Reason", "When"])
+        .style(
+            Style::default()
+                .fg(THEME.table_header)
+                .add_modifier(Modifier::BOLD),
+        )
+        .height(1);
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(2),
+            Constraint::Percentage(32),
+            Constraint::Percentage(8),
+            Constraint::Percentage(12),
+            Constraint::Percentage(26),
+            Constraint::Percentage(18),
+        ],
+    )
+    .header(header)
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Potential Intrusion Signals")
+            .border_style(Style::default().fg(THEME.table_border)),
+    )
+    .column_spacing(2);
+
+    frame.render_widget(table, area);
+}
+
 fn render_pie_legend(
     frame: &mut Frame,
     area: Rect,
@@ -984,6 +1188,76 @@ fn render_pie_legend(
             .border_style(Style::default().fg(THEME.gold)),
     );
     frame.render_widget(legend, area);
+}
+
+fn refresh_overview_state(app: &mut AppState) -> Result<(), String> {
+    let tables = get_overview_tables().map_err(|e| format!("Failed to load overview: {}", e))?;
+    let recent = get_recent_entries(10).map_err(|e| format!("Failed to load recent: {}", e))?;
+    let recent_for_ids =
+        get_recent_entries(200).map_err(|e| format!("Failed to load recent: {}", e))?;
+    app.overview = Some(tables);
+    app.recent_rows = build_recent_rows(&recent);
+    app.intrusion_rows = build_intrusion_rows(&detect_intrusions(&recent_for_ids));
+    app.last_refresh = Instant::now();
+    Ok(())
+}
+
+fn build_recent_rows(entries: &[Entry]) -> Vec<Vec<String>> {
+    entries
+        .iter()
+        .map(|entry| {
+            let status = match &entry.status {
+                CommandStatus::Success => "Success".to_string(),
+                CommandStatus::Unknown => "Unknown".to_string(),
+                CommandStatus::Error(code) => format!("Error({})", code),
+            };
+            let when = format_relative_time(entry.timestamp);
+            vec![entry.command.clone(), status, when]
+        })
+        .collect()
+}
+
+fn build_intrusion_rows(findings: &[IntrusionFinding]) -> Vec<Vec<String>> {
+    findings
+        .iter()
+        .take(10)
+        .map(|finding| {
+            let when = format_relative_time(finding.timestamp);
+            let reason = finding.reasons.join(", ");
+            vec![
+                finding.command.clone(),
+                finding.score.to_string(),
+                format!("{} ({})", finding.user, finding.user_type),
+                reason,
+                when,
+            ]
+        })
+        .collect()
+}
+
+fn format_relative_time(timestamp: i64) -> String {
+    let now = Utc::now().timestamp();
+    let diff = now.saturating_sub(timestamp);
+    if diff < 60 {
+        "just now".to_string()
+    } else if diff < 3600 {
+        format!("{}m ago", diff / 60)
+    } else if diff < 86_400 {
+        format!("{}h ago", diff / 3600)
+    } else if diff < 604_800 {
+        format!("{}d ago", diff / 86_400)
+    } else {
+        format!("{}w ago", diff / 604_800)
+    }
+}
+
+fn score_to_color(score: i32) -> Color {
+    let clamped = score.clamp(1, 20) as f32;
+    let t = (clamped - 1.0) / 19.0;
+    let r = 220u8;
+    let g = (220.0 - 140.0 * t).round().max(0.0) as u8;
+    let b = 0u8;
+    Color::Rgb(r, g, b)
 }
 
 fn basket_logo_text(phase: usize) -> Text<'static> {

@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use uuid::Uuid;
 
-use crate::helpers::{detect_user_shell, ShellType};
+use crate::helpers::{current_user, detect_user_shell, ShellType};
 use crate::logging::{log_to_console, Status};
 
 fn load_history_from_zsh(
@@ -83,6 +83,7 @@ fn load_history_data() -> Result<Vec<(i64, String)>, Box<dyn std::error::Error>>
 }
 
 pub fn save_history() -> Result<(), Box<dyn std::error::Error>> {
+    let user = current_user();
     let last_entry = match get_last_entry() {
         Ok(entry) => entry,
         Err(e) => {
@@ -96,6 +97,7 @@ pub fn save_history() -> Result<(), Box<dyn std::error::Error>> {
                 command: String::new(),
                 date: Utc.to_string(),
                 status: crate::db::CommandStatus::Unknown,
+                user: String::new(),
             }
         }
     };
@@ -118,6 +120,7 @@ pub fn save_history() -> Result<(), Box<dyn std::error::Error>> {
                             &command,
                             &formatted_datetime,
                             Some(crate::db::CommandStatus::Unknown),
+                            &user,
                         ) {
                             log_to_console(
                                 &format!("Failed to insert history entry: {}", err),
@@ -144,6 +147,7 @@ pub fn save_history_realtime(
     status: i32,
     timestamp: i64,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let user = current_user();
     // Convert UNIX timestamp → UTC datetime
     let datetime_utc = Utc
         .timestamp_opt(timestamp, 0)
@@ -160,8 +164,13 @@ pub fn save_history_realtime(
     };
 
     // Insert into DB
-    if let Err(err) = insert_history_entry(&timestamp, command, &formatted_datetime, command_status)
-    {
+    if let Err(err) = insert_history_entry(
+        &timestamp,
+        command,
+        &formatted_datetime,
+        command_status,
+        &user,
+    ) {
         log_to_console(
             &format!("Failed to insert history entry: {}", err),
             Status::ERROR,

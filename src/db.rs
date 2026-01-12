@@ -21,6 +21,7 @@ pub struct Entry {
     pub command: String,
     pub date: String,
     pub status: CommandStatus,
+    pub user: String,
 }
 
 pub fn establish_connection() -> Result<Connection, Box<dyn Error>> {
@@ -46,7 +47,8 @@ pub fn create_db(conn: &Connection) -> Result<(), Box<dyn Error>> {
     timestamp INTEGER NOT NULL,
     date TEXT NOT NULL,
     command TEXT NOT NULL,
-    status TEXT NOT NULL
+    status TEXT NOT NULL,
+    user TEXT NOT NULL
     );
     ",
         [],
@@ -64,6 +66,7 @@ pub fn insert_history_entry(
     command: &str,
     date: &str,
     status: Option<CommandStatus>,
+    user: &str,
 ) -> Result<(), Box<dyn Error>> {
     let status = status.unwrap_or(CommandStatus::Unknown);
     match establish_connection() {
@@ -71,8 +74,15 @@ pub fn insert_history_entry(
             let id = Uuid::new_v4();
             // Attempt to insert data into the table
             if let Err(e) = conn.execute(
-                "INSERT INTO history (id, timestamp, command, date, status) VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![id.to_string(), timestamp, command, date, format!("{:?}", status)],
+                "INSERT INTO history (id, timestamp, command, date, status, user) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    id.to_string(),
+                    timestamp,
+                    command,
+                    date,
+                    format!("{:?}", status),
+                    user
+                ],
             ) {
                 log_to_console(
                     &format!("Failed to insert history entry: {}", e),
@@ -109,7 +119,8 @@ fn parse_status(s: &str) -> CommandStatus {
 
 pub fn get_all_history_entries() -> Result<Vec<Entry>, Box<dyn Error>> {
     let conn = establish_connection()?;
-    let mut stmt = conn.prepare("SELECT id, timestamp, command, date, status FROM history")?;
+    let mut stmt =
+        conn.prepare("SELECT id, timestamp, command, date, status, user FROM history")?;
 
     let entries_iter = stmt.query_map([], |row| {
         let status_str: String = row.get(4)?;
@@ -119,6 +130,7 @@ pub fn get_all_history_entries() -> Result<Vec<Entry>, Box<dyn Error>> {
             command: row.get::<_, String>(2)?,
             date: row.get::<_, String>(3)?,
             status: parse_status(&status_str),
+            user: row.get::<_, String>(5)?,
         })
     })?;
 
@@ -136,7 +148,7 @@ pub fn get_last_entry() -> Result<Entry, Box<dyn Error>> {
     let conn = establish_connection()?;
 
     let mut stmt = conn.prepare(
-        "SELECT id, timestamp, command, date, status FROM history ORDER BY date DESC LIMIT 1",
+        "SELECT id, timestamp, command, date, status, user FROM history ORDER BY date DESC LIMIT 1",
     )?;
     let mut last_row = stmt.query_map([], |row| {
         let status_str: String = row.get(4)?;
@@ -146,6 +158,7 @@ pub fn get_last_entry() -> Result<Entry, Box<dyn Error>> {
             command: row.get(2)?,
             date: row.get(3)?,
             status: parse_status(&status_str),
+            user: row.get::<_, String>(5)?,
         })
     })?;
     if let Some(result) = last_row.next() {
@@ -155,4 +168,46 @@ pub fn get_last_entry() -> Result<Entry, Box<dyn Error>> {
         log_to_console("No entries found", Status::ERROR);
         return Err("No entries found".into());
     }
+}
+
+pub fn get_recent_entries(limit: i64) -> Result<Vec<Entry>, Box<dyn Error>> {
+    let conn = establish_connection()?;
+    let mut stmt = conn.prepare(
+        "SELECT id, timestamp, command, date, status, user FROM history ORDER BY timestamp DESC LIMIT ?1",
+    )?;
+
+    let entries_iter = stmt.query_map([limit], |row| {
+        let status_str: String = row.get(4)?;
+        Ok(Entry {
+            id: row.get::<_, String>(0)?,
+            timestamp: row.get::<_, i64>(1)?,
+            command: row.get::<_, String>(2)?,
+            date: row.get::<_, String>(3)?,
+            status: parse_status(&status_str),
+            user: row.get::<_, String>(5)?,
+        })
+    })?;
+
+    let entries: Result<Vec<Entry>, _> = entries_iter.collect();
+    Ok(entries?)
+}
+
+pub fn ensure_user_column(conn: &Connection) -> Result<(), Box<dyn Error>> {
+    let mut stmt = conn.prepare("PRAGMA table_info(history)")?;
+    let mut rows = stmt.query([])?;
+    let mut has_user = false;
+    while let Some(row) = rows.next()? {
+        let name: String = row.get(1)?;
+        if name == "user" {
+            has_user = true;
+            break;
+        }
+    }
+    if !has_user {
+        conn.execute(
+            "ALTER TABLE history ADD COLUMN user TEXT NOT NULL DEFAULT 'unknown'",
+            [],
+        )?;
+    }
+    Ok(())
 }
