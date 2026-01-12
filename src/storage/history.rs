@@ -1,11 +1,11 @@
-use crate::db::{get_last_entry, insert_history_entry, CommandStatus, Entry};
+use crate::storage::db::{get_last_entry, insert_history_entry, CommandStatus, Entry};
 use chrono::{TimeZone, Utc};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use uuid::Uuid;
 
-use crate::helpers::{current_user, detect_user_shell, ShellType};
-use crate::logging::{log_to_console, Status};
+use crate::util::helpers::{current_user, detect_user_shell, ShellType};
+use crate::util::logging::{log_to_console, Status};
 
 fn load_history_from_zsh(
     line: &str,
@@ -96,7 +96,7 @@ pub fn save_history() -> Result<(), Box<dyn std::error::Error>> {
                 timestamp: 0,
                 command: String::new(),
                 date: Utc.to_string(),
-                status: crate::db::CommandStatus::Unknown,
+                status: crate::storage::db::CommandStatus::Unknown,
                 user: String::new(),
             }
         }
@@ -119,7 +119,7 @@ pub fn save_history() -> Result<(), Box<dyn std::error::Error>> {
                             &timestamp,
                             &command,
                             &formatted_datetime,
-                            Some(crate::db::CommandStatus::Unknown),
+                            Some(crate::storage::db::CommandStatus::Unknown),
                             &user,
                         ) {
                             log_to_console(

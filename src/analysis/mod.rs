@@ -2,9 +2,9 @@ use std::collections::{HashMap, HashSet};
 use strsim::levenshtein;
 use terminal_emoji::Emoji;
 
-use crate::db::{get_all_history_entries, CommandStatus, Entry};
-use crate::helpers::max_distance;
-use crate::logging::{log_table_to_console, log_to_console, Status};
+use crate::storage::db::{get_all_history_entries, CommandStatus, Entry};
+use crate::util::helpers::max_distance;
+use crate::util::logging::{log_table_to_console, log_to_console, Status};
 
 fn calculate_command_occurance(command: &String, entries: &[Entry]) -> i32 {
     let mut count: i32 = 0;

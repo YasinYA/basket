@@ -18,10 +18,10 @@ use ratatui::widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Tab
 use ratatui::Terminal;
 use tui_piechart::{symbols, PieChart, PieSlice, Resolution};
 
-use crate::analyze_commands::{get_overview_tables, OverviewTables};
-use crate::db::{get_recent_entries, CommandStatus, Entry};
+use crate::analysis::{get_overview_tables, OverviewTables};
 use crate::ids::{detect_intrusions, IntrusionFinding};
-use crate::realtime_commands::save_realtime_commands;
+use crate::runtime::realtime::save_realtime_commands;
+use crate::storage::db::{get_recent_entries, CommandStatus, Entry};
 
 struct Theme {
     gold: Color,

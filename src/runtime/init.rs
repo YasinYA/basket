@@ -1,4 +1,4 @@
-use crate::helpers::{detect_user_shell, ShellType};
+use crate::util::helpers::{detect_user_shell, ShellType};
 use std::io::Write;
 use std::{env, fs, path};
 

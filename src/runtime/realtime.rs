@@ -7,8 +7,8 @@ use std::sync::mpsc::{channel, Receiver};
 use std::thread;
 use std::time::Duration;
 
-use crate::history_file::save_history_realtime;
-use crate::logging::{log_to_console, Status};
+use crate::storage::history::save_history_realtime;
+use crate::util::logging::{log_to_console, Status};
 
 /// Internal poller shared by polling & watcher
 #[warn(dead_code)]

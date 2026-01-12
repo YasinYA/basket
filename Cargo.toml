@@ -2,16 +2,23 @@
 name = "basket"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
+description = "Local TUI for shell history analytics and command-based intrusion detection."
+readme = "README.md"
+repository = "https://example.com/basket"
+homepage = "https://example.com/basket"
+keywords = ["tui", "security", "shell", "history", "ids"]
+categories = ["command-line-utilities", "development-tools", "security"]
+authors = ["Yasin Ya <yasin@teckave.co>"]
 
 [dependencies]
 chrono = "0.4"
 colored = "3.0.0"
-envvars = "0.1.10"
 notify = "8.2.0"
 ratatui = { version = "0.29", features = ["all-widgets"] }
 crossterm = "0.27"
 rusqlite = { version = "0.37.0", features = ["bundled"] }
-serde = "1.0.228"
+serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 strsim = "0.11.1"
 terminal-emoji = "0.4.1"

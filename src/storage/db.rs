@@ -1,4 +1,4 @@
-use crate::logging::{log_to_console, Status};
+use crate::util::logging::{log_to_console, Status};
 use rusqlite::{params, Connection, Result};
 use std::error::Error;
 use uuid::Uuid;

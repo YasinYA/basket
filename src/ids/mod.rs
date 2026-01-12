@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use std::fs;
 use std::path::Path;
 
-use crate::db::{CommandStatus, Entry};
+use crate::storage::db::{CommandStatus, Entry};
 
 #[derive(Debug, Clone)]
 pub struct IntrusionFinding {

@@ -1,17 +1,16 @@
-mod analyze_commands;
-mod db;
-mod helpers;
-mod history_file;
+mod analysis;
 mod ids;
-mod init;
-mod logging;
-mod realtime_commands;
-mod tui_app;
+mod runtime;
+mod storage;
+mod ui;
+mod util;
 
-use helpers::{detect_user_shell, is_history_read};
-use init::setup;
-use logging::{log_to_console, Status};
-use tui_app::{run as run_tui, TuiExit};
+use runtime::init::setup;
+use storage::db;
+use storage::history;
+use ui::{run as run_tui, TuiExit};
+use util::helpers::{detect_user_shell, is_history_read};
+use util::logging::{log_to_console, Status};
 
 fn main() {
     println!(
@@ -48,7 +47,7 @@ fn main() {
                 Status::ERROR,
             ),
         }
-        if let Err(e) = history_file::save_history() {
+        if let Err(e) = history::save_history() {
             log_to_console(&format!("Failed to load history: {}", e), Status::ERROR);
         }
     }
