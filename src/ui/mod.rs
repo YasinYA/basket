@@ -88,8 +88,8 @@ enum Screen {
     Error(String),
 }
 
-#[derive(Copy, Clone)]
-enum OverviewView {
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum OverviewView {
     Tables,
     Charts,
 }
@@ -169,32 +169,12 @@ fn run_loop(
 ) -> Result<TuiExit, Box<dyn Error>> {
     let menu_items = ["View overview", "Start realtime watcher", "Exit"];
     let mut app = AppState::new();
-    let exit_action = TuiExit::Exit;
-
     let tick_rate = Duration::from_millis(120);
     let refresh_rate = Duration::from_secs(1);
 
     loop {
-        if app.last_tick.elapsed() >= tick_rate {
-            app.logo_phase = (app.logo_phase + 1) % 6;
-            if matches!(app.screen, Screen::Overview)
-                && matches!(app.overview_view, OverviewView::Charts)
-                && app.chart_progress < 1.0
-            {
-                app.chart_progress = (app.chart_progress + 0.08).min(1.0);
-            }
-            if matches!(app.screen, Screen::Overview)
-                && app.watcher_started
-                && app.last_refresh.elapsed() >= refresh_rate
-            {
-                if let Err(err) = refresh_overview_state(&mut app) {
-                    app.screen = Screen::Error(err);
-                }
-            }
-            if matches!(app.screen, Screen::Watcher) {
-                app.watcher_spinner = (app.watcher_spinner + 1) % spinner_frames().len();
-            }
-            app.last_tick = Instant::now();
+        if let Err(err) = tick_app(&mut app, tick_rate, refresh_rate, refresh_overview_state) {
+            app.screen = Screen::Error(err);
         }
 
         terminal.draw(|frame| match &app.screen {
@@ -221,186 +201,231 @@ fn run_loop(
 
         if event::poll(Duration::from_millis(200))? {
             if let Event::Key(key) = event::read()? {
-                if app.filter_input {
-                    match key.code {
-                        KeyCode::Enter => {
-                            app.filter_query = app.filter_buffer.trim().to_string();
-                            app.filter_input = false;
-                            app.table_selection = [0, 0, 0];
-                        }
-                        KeyCode::Esc => {
-                            app.filter_query.clear();
-                            app.filter_buffer.clear();
-                            app.filter_input = false;
-                            app.table_selection = [0, 0, 0];
-                        }
-                        KeyCode::Backspace => {
-                            app.filter_buffer.pop();
-                        }
-                        KeyCode::Char(c) => {
-                            if !c.is_control() {
-                                app.filter_buffer.push(c);
-                            }
-                        }
-                        _ => {}
-                    }
-                    continue;
-                }
-                match app.screen {
-                    Screen::Menu => match key.code {
-                        KeyCode::Up => {
-                            if app.menu_index == 0 {
-                                app.menu_index = menu_items.len() - 1;
-                            } else {
-                                app.menu_index -= 1;
-                            }
-                        }
-                        KeyCode::Down => {
-                            app.menu_index = (app.menu_index + 1) % menu_items.len();
-                        }
-                        KeyCode::Enter => match app.menu_index {
-                            0 => {
-                                if let Err(err) = refresh_overview_state(&mut app) {
-                                    app.screen = Screen::Error(err);
-                                } else {
-                                    app.screen = Screen::Overview;
-                                }
-                            }
-                            1 => {
-                                app.screen = Screen::Watcher;
-                                if !app.watcher_started {
-                                    app.watcher_started = true;
-                                    thread::spawn(|| {
-                                        let _ = save_realtime_commands();
-                                    });
-                                }
-                            }
-                            _ => return Ok(exit_action),
-                        },
-                        KeyCode::Char('q') => return Ok(exit_action),
-                        _ => {}
-                    },
-                    Screen::Overview => match key.code {
-                        KeyCode::Char('c') => {
-                            app.overview_view = OverviewView::Charts;
-                            app.chart_progress = 0.0;
-                            app.chart_index = 0;
-                        }
-                        KeyCode::Char('t') => {
-                            app.overview_view = OverviewView::Tables;
-                            app.table_index = 0;
-                        }
-                        KeyCode::Char('s') => {
-                            if matches!(app.overview_view, OverviewView::Tables) {
-                                app.sort_asc = !app.sort_asc;
-                                app.table_selection = [0, 0, 0];
-                            }
-                        }
-                        KeyCode::Char('/') => {
-                            if matches!(app.overview_view, OverviewView::Tables) {
-                                app.filter_input = true;
-                                app.filter_buffer = app.filter_query.clone();
-                            }
-                        }
-                        KeyCode::Char('x') => {
-                            if matches!(app.overview_view, OverviewView::Tables) {
-                                app.filter_query.clear();
-                                app.filter_buffer.clear();
-                                app.table_selection = [0, 0, 0];
-                            }
-                        }
-                        KeyCode::Left => {
-                            if matches!(app.overview_view, OverviewView::Charts) {
-                                if app.chart_index == 0 {
-                                    app.chart_index = 2;
-                                } else {
-                                    app.chart_index -= 1;
-                                }
-                            } else if matches!(app.overview_view, OverviewView::Tables) {
-                                if app.table_index == 0 {
-                                    app.table_index = 2;
-                                } else {
-                                    app.table_index -= 1;
-                                }
-                            }
-                        }
-                        KeyCode::Right => {
-                            if matches!(app.overview_view, OverviewView::Charts) {
-                                app.chart_index = (app.chart_index + 1) % 3;
-                            } else if matches!(app.overview_view, OverviewView::Tables) {
-                                app.table_index = (app.table_index + 1) % 3;
-                            }
-                        }
-                        KeyCode::Up => {
-                            if matches!(app.overview_view, OverviewView::Charts) {
-                                let len = chart_len(app.overview.as_ref(), app.chart_index);
-                                if len > 0 {
-                                    let idx = &mut app.chart_selection[app.chart_index];
-                                    if *idx == 0 {
-                                        *idx = len - 1;
-                                    } else {
-                                        *idx -= 1;
-                                    }
-                                }
-                            } else if matches!(app.overview_view, OverviewView::Tables) {
-                                let len = table_len_filtered(
-                                    app.overview.as_ref(),
-                                    app.table_index,
-                                    &app.filter_query,
-                                );
-                                if len > 0 {
-                                    let idx = &mut app.table_selection[app.table_index];
-                                    if *idx == 0 {
-                                        *idx = len - 1;
-                                    } else {
-                                        *idx -= 1;
-                                    }
-                                }
-                            }
-                        }
-                        KeyCode::Down => {
-                            if matches!(app.overview_view, OverviewView::Charts) {
-                                let len = chart_len(app.overview.as_ref(), app.chart_index);
-                                if len > 0 {
-                                    let idx = &mut app.chart_selection[app.chart_index];
-                                    *idx = (*idx + 1) % len;
-                                }
-                            } else if matches!(app.overview_view, OverviewView::Tables) {
-                                let len = table_len_filtered(
-                                    app.overview.as_ref(),
-                                    app.table_index,
-                                    &app.filter_query,
-                                );
-                                if len > 0 {
-                                    let idx = &mut app.table_selection[app.table_index];
-                                    *idx = (*idx + 1) % len;
-                                }
-                            }
-                        }
-                        KeyCode::Char('b') => {
-                            app.screen = Screen::Menu;
-                        }
-                        KeyCode::Char('q') => return Ok(exit_action),
-                        _ => {}
-                    },
-                    Screen::Watcher => match key.code {
-                        KeyCode::Char('b') => {
-                            app.screen = Screen::Menu;
-                        }
-                        KeyCode::Char('q') => return Ok(exit_action),
-                        _ => {}
-                    },
-                    Screen::Error(_) => match key.code {
-                        KeyCode::Char('b') => {
-                            app.screen = Screen::Menu;
-                        }
-                        KeyCode::Char('q') => return Ok(exit_action),
-                        _ => {}
-                    },
+                if let Some(exit_action) =
+                    handle_key_event(&mut app, key.code, &menu_items, refresh_overview_state)
+                {
+                    return Ok(exit_action);
                 }
             }
         }
     }
+}
+
+fn tick_app(
+    app: &mut AppState,
+    tick_rate: Duration,
+    refresh_rate: Duration,
+    refresh_fn: fn(&mut AppState) -> Result<(), String>,
+) -> Result<(), String> {
+    if app.last_tick.elapsed() >= tick_rate {
+        app.logo_phase = (app.logo_phase + 1) % 6;
+        if matches!(app.screen, Screen::Overview)
+            && matches!(app.overview_view, OverviewView::Charts)
+            && app.chart_progress < 1.0
+        {
+            app.chart_progress = (app.chart_progress + 0.08).min(1.0);
+        }
+        if matches!(app.screen, Screen::Overview)
+            && app.watcher_started
+            && app.last_refresh.elapsed() >= refresh_rate
+        {
+            refresh_fn(app)?;
+        }
+        if matches!(app.screen, Screen::Watcher) {
+            app.watcher_spinner = (app.watcher_spinner + 1) % spinner_frames().len();
+        }
+        app.last_tick = Instant::now();
+    }
+
+    Ok(())
+}
+
+fn handle_key_event(
+    app: &mut AppState,
+    key: KeyCode,
+    menu_items: &[&str],
+    refresh_fn: fn(&mut AppState) -> Result<(), String>,
+) -> Option<TuiExit> {
+    if app.filter_input {
+        match key {
+            KeyCode::Enter => {
+                app.filter_query = app.filter_buffer.trim().to_string();
+                app.filter_input = false;
+                app.table_selection = [0, 0, 0];
+            }
+            KeyCode::Esc => {
+                app.filter_query.clear();
+                app.filter_buffer.clear();
+                app.filter_input = false;
+                app.table_selection = [0, 0, 0];
+            }
+            KeyCode::Backspace => {
+                app.filter_buffer.pop();
+            }
+            KeyCode::Char(c) => {
+                if !c.is_control() {
+                    app.filter_buffer.push(c);
+                }
+            }
+            _ => {}
+        }
+        return None;
+    }
+
+    match app.screen {
+        Screen::Menu => match key {
+            KeyCode::Up => {
+                if app.menu_index == 0 {
+                    app.menu_index = menu_items.len() - 1;
+                } else {
+                    app.menu_index -= 1;
+                }
+            }
+            KeyCode::Down => {
+                app.menu_index = (app.menu_index + 1) % menu_items.len();
+            }
+            KeyCode::Enter => match app.menu_index {
+                0 => {
+                    if let Err(err) = refresh_fn(app) {
+                        app.screen = Screen::Error(err);
+                    } else {
+                        app.screen = Screen::Overview;
+                    }
+                }
+                1 => {
+                    app.screen = Screen::Watcher;
+                    if !app.watcher_started {
+                        app.watcher_started = true;
+                        thread::spawn(|| {
+                            let _ = save_realtime_commands();
+                        });
+                    }
+                }
+                _ => return Some(TuiExit::Exit),
+            },
+            KeyCode::Char('q') => return Some(TuiExit::Exit),
+            _ => {}
+        },
+        Screen::Overview => match key {
+            KeyCode::Char('c') => {
+                app.overview_view = OverviewView::Charts;
+                app.chart_progress = 0.0;
+                app.chart_index = 0;
+            }
+            KeyCode::Char('t') => {
+                app.overview_view = OverviewView::Tables;
+                app.table_index = 0;
+            }
+            KeyCode::Char('s') => {
+                if matches!(app.overview_view, OverviewView::Tables) {
+                    app.sort_asc = !app.sort_asc;
+                    app.table_selection = [0, 0, 0];
+                }
+            }
+            KeyCode::Char('/') => {
+                if matches!(app.overview_view, OverviewView::Tables) {
+                    app.filter_input = true;
+                    app.filter_buffer = app.filter_query.clone();
+                }
+            }
+            KeyCode::Char('x') => {
+                if matches!(app.overview_view, OverviewView::Tables) {
+                    app.filter_query.clear();
+                    app.filter_buffer.clear();
+                    app.table_selection = [0, 0, 0];
+                }
+            }
+            KeyCode::Left => {
+                if matches!(app.overview_view, OverviewView::Charts) {
+                    if app.chart_index == 0 {
+                        app.chart_index = 2;
+                    } else {
+                        app.chart_index -= 1;
+                    }
+                } else if matches!(app.overview_view, OverviewView::Tables) {
+                    if app.table_index == 0 {
+                        app.table_index = 2;
+                    } else {
+                        app.table_index -= 1;
+                    }
+                }
+            }
+            KeyCode::Right => {
+                if matches!(app.overview_view, OverviewView::Charts) {
+                    app.chart_index = (app.chart_index + 1) % 3;
+                } else if matches!(app.overview_view, OverviewView::Tables) {
+                    app.table_index = (app.table_index + 1) % 3;
+                }
+            }
+            KeyCode::Up => {
+                if matches!(app.overview_view, OverviewView::Charts) {
+                    let len = chart_len(app.overview.as_ref(), app.chart_index);
+                    if len > 0 {
+                        let idx = &mut app.chart_selection[app.chart_index];
+                        if *idx == 0 {
+                            *idx = len - 1;
+                        } else {
+                            *idx -= 1;
+                        }
+                    }
+                } else if matches!(app.overview_view, OverviewView::Tables) {
+                    let len = table_len_filtered(
+                        app.overview.as_ref(),
+                        app.table_index,
+                        &app.filter_query,
+                    );
+                    if len > 0 {
+                        let idx = &mut app.table_selection[app.table_index];
+                        if *idx == 0 {
+                            *idx = len - 1;
+                        } else {
+                            *idx -= 1;
+                        }
+                    }
+                }
+            }
+            KeyCode::Down => {
+                if matches!(app.overview_view, OverviewView::Charts) {
+                    let len = chart_len(app.overview.as_ref(), app.chart_index);
+                    if len > 0 {
+                        let idx = &mut app.chart_selection[app.chart_index];
+                        *idx = (*idx + 1) % len;
+                    }
+                } else if matches!(app.overview_view, OverviewView::Tables) {
+                    let len = table_len_filtered(
+                        app.overview.as_ref(),
+                        app.table_index,
+                        &app.filter_query,
+                    );
+                    if len > 0 {
+                        let idx = &mut app.table_selection[app.table_index];
+                        *idx = (*idx + 1) % len;
+                    }
+                }
+            }
+            KeyCode::Char('b') => {
+                app.screen = Screen::Menu;
+            }
+            KeyCode::Char('q') => return Some(TuiExit::Exit),
+            _ => {}
+        },
+        Screen::Watcher => match key {
+            KeyCode::Char('b') => {
+                app.screen = Screen::Menu;
+            }
+            KeyCode::Char('q') => return Some(TuiExit::Exit),
+            _ => {}
+        },
+        Screen::Error(_) => match key {
+            KeyCode::Char('b') => {
+                app.screen = Screen::Menu;
+            }
+            KeyCode::Char('q') => return Some(TuiExit::Exit),
+            _ => {}
+        },
+    }
+
+    None
 }
 
 fn render_menu(frame: &mut Frame, items: &[&str], selected: usize, logo_phase: usize) {
@@ -1237,6 +1262,10 @@ fn build_intrusion_rows(findings: &[IntrusionFinding]) -> Vec<Vec<String>> {
 
 fn format_relative_time(timestamp: i64) -> String {
     let now = Utc::now().timestamp();
+    format_relative_time_at(timestamp, now)
+}
+
+pub fn format_relative_time_at(timestamp: i64, now: i64) -> String {
     let diff = now.saturating_sub(timestamp);
     if diff < 60 {
         "just now".to_string()
@@ -1258,6 +1287,338 @@ fn score_to_color(score: i32) -> Color {
     let g = (220.0 - 140.0 * t).round().max(0.0) as u8;
     let b = 0u8;
     Color::Rgb(r, g, b)
+}
+
+pub mod testing {
+    use super::*;
+
+    pub use super::OverviewView;
+    pub struct TestState {
+        app: AppState,
+    }
+
+    impl TestState {
+        pub fn new() -> Self {
+            Self {
+                app: AppState::new(),
+            }
+        }
+
+        pub fn set_screen_menu(&mut self) {
+            self.app.screen = Screen::Menu;
+        }
+
+        pub fn set_screen_overview(&mut self) {
+            self.app.screen = Screen::Overview;
+        }
+
+        pub fn set_screen_watcher(&mut self) {
+            self.app.screen = Screen::Watcher;
+        }
+
+        pub fn set_screen_error(&mut self, message: &str) {
+            self.app.screen = Screen::Error(message.to_string());
+        }
+
+        pub fn set_overview(&mut self, tables: OverviewTables) {
+            self.app.overview = Some(tables);
+        }
+
+        pub fn set_overview_view(&mut self, view: OverviewView) {
+            self.app.overview_view = view;
+        }
+
+        pub fn set_filter_query(&mut self, query: &str) {
+            self.app.filter_query = query.to_string();
+        }
+
+        pub fn set_filter_input(&mut self, enabled: bool) {
+            self.app.filter_input = enabled;
+        }
+
+        pub fn set_filter_buffer(&mut self, buffer: &str) {
+            self.app.filter_buffer = buffer.to_string();
+        }
+
+        pub fn set_watcher_started(&mut self, started: bool) {
+            self.app.watcher_started = started;
+        }
+
+        pub fn set_last_tick_offset(&mut self, offset: Duration) {
+            self.app.last_tick = Instant::now()
+                .checked_sub(offset)
+                .unwrap_or_else(Instant::now);
+        }
+
+        pub fn set_last_refresh_offset(&mut self, offset: Duration) {
+            self.app.last_refresh = Instant::now()
+                .checked_sub(offset)
+                .unwrap_or_else(Instant::now);
+        }
+
+        pub fn screen(&self) -> &'static str {
+            match self.app.screen {
+                Screen::Menu => "menu",
+                Screen::Overview => "overview",
+                Screen::Watcher => "watcher",
+                Screen::Error(_) => "error",
+            }
+        }
+
+        pub fn menu_index(&self) -> usize {
+            self.app.menu_index
+        }
+
+        pub fn set_menu_index(&mut self, idx: usize) {
+            self.app.menu_index = idx;
+        }
+
+        pub fn overview_view(&self) -> OverviewView {
+            self.app.overview_view
+        }
+
+        pub fn chart_index(&self) -> usize {
+            self.app.chart_index
+        }
+
+        pub fn table_index(&self) -> usize {
+            self.app.table_index
+        }
+
+        pub fn filter_input(&self) -> bool {
+            self.app.filter_input
+        }
+
+        pub fn filter_query(&self) -> &str {
+            &self.app.filter_query
+        }
+
+        pub fn filter_buffer(&self) -> &str {
+            &self.app.filter_buffer
+        }
+
+        pub fn chart_selection(&self) -> [usize; 3] {
+            self.app.chart_selection
+        }
+
+        pub fn table_selection(&self) -> [usize; 3] {
+            self.app.table_selection
+        }
+
+        pub fn watcher_spinner(&self) -> usize {
+            self.app.watcher_spinner
+        }
+
+        pub fn chart_progress(&self) -> f32 {
+            self.app.chart_progress
+        }
+
+        pub fn tick(&mut self, tick_rate: Duration, refresh_rate: Duration) -> Result<(), String> {
+            tick_app(
+                &mut self.app,
+                tick_rate,
+                refresh_rate,
+                refresh_stub_for_test,
+            )
+        }
+
+        pub fn handle_key(&mut self, key: KeyCode, menu_items: &[&str]) -> Option<TuiExit> {
+            handle_key_event(&mut self.app, key, menu_items, refresh_stub_for_test)
+        }
+
+        pub fn handle_key_with_error(
+            &mut self,
+            key: KeyCode,
+            menu_items: &[&str],
+        ) -> Option<TuiExit> {
+            handle_key_event(&mut self.app, key, menu_items, refresh_error_for_test)
+        }
+    }
+
+    pub fn render_menu_for_test(
+        frame: &mut Frame,
+        items: &[&str],
+        selected: usize,
+        logo_phase: usize,
+    ) {
+        render_menu(frame, items, selected, logo_phase);
+    }
+
+    pub fn render_overview_for_test(
+        frame: &mut Frame,
+        tables: Option<&OverviewTables>,
+        view: OverviewView,
+        chart_progress: f32,
+        chart_index: usize,
+        chart_selection: [usize; 3],
+        table_index: usize,
+        table_selection: [usize; 3],
+        filter_query: &str,
+        sort_asc: bool,
+        filter_input: bool,
+        filter_buffer: &str,
+        recent_rows: &[Vec<String>],
+        intrusion_rows: &[Vec<String>],
+    ) {
+        render_overview(
+            frame,
+            tables,
+            view,
+            chart_progress,
+            chart_index,
+            chart_selection,
+            table_index,
+            table_selection,
+            filter_query,
+            sort_asc,
+            filter_input,
+            filter_buffer,
+            recent_rows,
+            intrusion_rows,
+        );
+    }
+
+    pub fn render_error_for_test(frame: &mut Frame, message: &str) {
+        render_error(frame, message);
+    }
+
+    pub fn render_watcher_for_test(frame: &mut Frame, spinner_index: usize) {
+        render_watcher(frame, spinner_index);
+    }
+
+    pub fn render_table_for_test(
+        frame: &mut Frame,
+        area: Rect,
+        title: &str,
+        data: &[Vec<String>],
+        selected_index: usize,
+        is_focused: bool,
+    ) {
+        render_table(frame, area, title, data, selected_index, is_focused);
+    }
+
+    pub fn render_chart_for_test(
+        frame: &mut Frame,
+        area: Rect,
+        title: &str,
+        data: &[Vec<String>],
+        progress: f32,
+        selected_index: usize,
+        is_focused: bool,
+    ) {
+        render_chart(
+            frame,
+            area,
+            title,
+            data,
+            progress,
+            selected_index,
+            is_focused,
+        );
+    }
+
+    pub fn render_filter_prompt_for_test(frame: &mut Frame, area: Rect, buffer: &str) {
+        render_filter_prompt(frame, area, buffer);
+    }
+
+    pub fn render_recent_table_for_test(frame: &mut Frame, area: Rect, data: &[Vec<String>]) {
+        render_recent_table(frame, area, data);
+    }
+
+    pub fn render_intrusion_table_for_test(frame: &mut Frame, area: Rect, data: &[Vec<String>]) {
+        render_intrusion_table(frame, area, data);
+    }
+
+    pub fn render_pie_legend_for_test(
+        frame: &mut Frame,
+        area: Rect,
+        labels: &[String],
+        values: &[f64],
+        colors: &[Color],
+        selected_index: usize,
+        is_focused: bool,
+    ) {
+        render_pie_legend(
+            frame,
+            area,
+            labels,
+            values,
+            colors,
+            selected_index,
+            is_focused,
+        );
+    }
+
+    pub fn parse_leading_count_for_test(value: &str) -> Option<u64> {
+        parse_leading_count(value)
+    }
+
+    pub fn brighten_color_for_test(color: Color, amount: u8) -> Color {
+        brighten_color(color, amount)
+    }
+
+    pub fn dim_color_for_test(color: Color, amount: u8) -> Color {
+        dim_color(color, amount)
+    }
+
+    pub fn chart_len_for_test(tables: Option<&OverviewTables>, chart_index: usize) -> usize {
+        chart_len(tables, chart_index)
+    }
+
+    pub fn table_len_filtered_for_test(
+        tables: Option<&OverviewTables>,
+        table_index: usize,
+        filter: &str,
+    ) -> usize {
+        table_len_filtered(tables, table_index, filter)
+    }
+
+    pub fn filter_sort_rows_for_test(
+        data: &[Vec<String>],
+        filter: &str,
+        asc: bool,
+    ) -> Vec<Vec<String>> {
+        filter_sort_rows(data, filter, asc)
+    }
+
+    pub fn build_recent_rows_for_test(entries: &[Entry]) -> Vec<Vec<String>> {
+        build_recent_rows(entries)
+    }
+
+    pub fn build_intrusion_rows_for_test(findings: &[IntrusionFinding]) -> Vec<Vec<String>> {
+        build_intrusion_rows(findings)
+    }
+
+    pub fn score_to_color_for_test(score: i32) -> Color {
+        score_to_color(score)
+    }
+
+    pub fn spinner_frames_for_test() -> [&'static str; 10] {
+        spinner_frames()
+    }
+
+    pub fn refresh_overview_for_test() -> Result<(usize, usize), String> {
+        let mut app = AppState::new();
+        refresh_overview_state(&mut app)?;
+        Ok((app.recent_rows.len(), app.intrusion_rows.len()))
+    }
+
+    pub fn logo_text_for_test(phase: usize) -> Text<'static> {
+        basket_logo_text(phase)
+    }
+
+    fn refresh_stub_for_test(app: &mut AppState) -> Result<(), String> {
+        app.overview = Some(OverviewTables {
+            top_commands: vec![vec!["ls".to_string(), "2".to_string()]],
+            top_unsuccessful: vec![vec!["rm".to_string(), "1".to_string()]],
+            mistyped_commands: vec![vec!["git".to_string(), "1 (gti)".to_string()]],
+        });
+        Ok(())
+    }
+
+    fn refresh_error_for_test(_app: &mut AppState) -> Result<(), String> {
+        Err("refresh failed".to_string())
+    }
 }
 
 fn basket_logo_text(phase: usize) -> Text<'static> {

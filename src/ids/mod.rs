@@ -224,7 +224,7 @@ fn sequence_sudo_shell(window: &VecDeque<(i64, Vec<CmdTag>)>) -> bool {
 
 fn rule_high_risk(raw: &str) -> Vec<RuleMatch> {
     let mut out = Vec::new();
-    if raw.contains("|") && contains_any(raw, &["| sh", "|bash", "| zsh", "|zsh"]) {
+    if raw.contains("|") && contains_any(raw, &["| sh", "| bash", "|bash", "| zsh", "|zsh"]) {
         out.push(RuleMatch {
             id: "highrisk.pipe_shell",
             score: 10,
@@ -367,5 +367,18 @@ fn status_to_score(status: &CommandStatus) -> i32 {
         CommandStatus::Success => 0,
         CommandStatus::Unknown => 1,
         CommandStatus::Error(_) => 2,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::status_to_score;
+    use crate::storage::db::CommandStatus;
+
+    #[test]
+    fn status_to_score_maps_statuses() {
+        assert_eq!(status_to_score(&CommandStatus::Success), 0);
+        assert_eq!(status_to_score(&CommandStatus::Unknown), 1);
+        assert_eq!(status_to_score(&CommandStatus::Error(42)), 2);
     }
 }

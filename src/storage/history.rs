@@ -51,6 +51,22 @@ fn load_history_from_bash(
     }
 }
 
+pub fn parse_zsh_line(
+    line: &str,
+    history_entries: &mut Vec<(i64, String)>,
+    current_timestamp: &mut Option<i64>,
+) {
+    load_history_from_zsh(line, history_entries, current_timestamp);
+}
+
+pub fn parse_bash_line(
+    line: &str,
+    history_entries: &mut Vec<(i64, String)>,
+    current_timestamp: &mut Option<i64>,
+) {
+    load_history_from_bash(line, history_entries, current_timestamp);
+}
+
 fn load_history_data() -> Result<Vec<(i64, String)>, Box<dyn std::error::Error>> {
     let active_shell = detect_user_shell();
     let parser: fn(&str, &mut Vec<(i64, String)>, &mut Option<i64>) = match active_shell {

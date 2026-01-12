@@ -29,7 +29,58 @@ pub enum WatchEvent {
     Error(std::io::Error),
 }
 
+fn process_notify_stream<I>(events: I, path: &str, out_tx: &std::sync::mpsc::Sender<WatchEvent>)
+where
+    I: IntoIterator<Item = notify::Result<notify::Event>>,
+{
+    let mut last_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+
+    for res in events {
+        let event = match res {
+            Ok(e) => e,
+            Err(e) => {
+                let _ = out_tx.send(WatchEvent::Error(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e,
+                )));
+                continue;
+            }
+        };
+
+        match event.kind {
+            EventKind::Modify(_) | EventKind::Create(_) => {
+                if let Ok(mut file) = File::open(path) {
+                    let new_size = file.metadata().map(|m| m.len()).unwrap_or(0);
+
+                    if new_size < last_size {
+                        last_size = 0;
+                    }
+
+                    if new_size > last_size {
+                        file.seek(SeekFrom::Start(last_size)).ok();
+                        let mut buf = String::new();
+                        file.read_to_string(&mut buf).ok();
+
+                        for line in buf.lines() {
+                            let _ = out_tx.send(WatchEvent::Line(line.to_string()));
+                        }
+
+                        last_size = new_size;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
 fn handle_realtime_line(line: &str) {
+    handle_realtime_line_with(line, save_history_realtime);
+}
+
+fn handle_realtime_line_with<F>(line: &str, save_fn: F)
+where
+    F: FnOnce(&str, i32, i64) -> std::result::Result<(), Box<dyn std::error::Error>>,
+{
     let parsed: RealtimeLine = match serde_json::from_str(line) {
         Ok(v) => v,
         Err(e) => {
@@ -41,11 +92,32 @@ fn handle_realtime_line(line: &str) {
         }
     };
 
-    if let Err(err) = save_history_realtime(&parsed.cmd, parsed.status, parsed.timestamp) {
+    if let Err(err) = save_fn(&parsed.cmd, parsed.status, parsed.timestamp) {
         log_to_console(
             &format!("Failed to save realtime command: {}", err),
             Status::ERROR,
         );
+    }
+}
+
+fn process_watch_events(rx: Receiver<WatchEvent>, max_events: Option<usize>) {
+    let mut handled = 0usize;
+    for event in rx {
+        match event {
+            WatchEvent::Line(line) => {
+                handle_realtime_line(&line);
+            }
+            WatchEvent::Error(err) => {
+                log_to_console(&format!("Realtime watcher error: {}", err), Status::ERROR);
+            }
+        }
+
+        handled += 1;
+        if let Some(max) = max_events {
+            if handled >= max {
+                break;
+            }
+        }
     }
 }
 
@@ -99,57 +171,14 @@ pub fn watch_cmdlog() -> Result<Receiver<WatchEvent>> {
             .watch(Path::new(&path), RecursiveMode::NonRecursive)
             .expect("failed to watch file");
 
-        let mut last_size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-
-        for res in rx {
-            let event = match res {
-                Ok(e) => e,
-                Err(e) => {
-                    let _ = out_tx.send(WatchEvent::Error(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        e,
-                    )));
-                    continue;
-                }
-            };
-
-            match event.kind {
-                EventKind::Modify(_) | EventKind::Create(_) => {
-                    if let Ok(mut file) = File::open(&path) {
-                        let new_size = file.metadata().map(|m| m.len()).unwrap_or(0);
-
-                        if new_size < last_size {
-                            last_size = 0;
-                        }
-
-                        if new_size > last_size {
-                            file.seek(SeekFrom::Start(last_size)).ok();
-                            let mut buf = String::new();
-                            file.read_to_string(&mut buf).ok();
-
-                            for line in buf.lines() {
-                                let _ = out_tx.send(WatchEvent::Line(line.to_string()));
-                            }
-
-                            last_size = new_size;
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
+        process_notify_stream(rx, &path, &out_tx);
     });
 
     Ok(out_rx)
 }
 
-fn save_commands_on_poll() {
-    let path = format!(
-        "{}/Documents/playground/basket/.cmdlog.json",
-        std::env::var("HOME").expect("HOME not set")
-    );
-
-    let mut poller = match FilePoller::new(&path) {
+fn save_commands_on_poll_with(path: &str, max_loops: Option<usize>) {
+    let mut poller = match FilePoller::new(path) {
         Ok(poller) => poller,
         Err(err) => {
             log_to_console(
@@ -160,47 +189,131 @@ fn save_commands_on_poll() {
         }
     };
 
+    let mut loops = 0usize;
     loop {
-        match poller.poll() {
-            Ok(lines) => {
-                for line in lines {
-                    handle_realtime_line(&line);
-                }
-            }
-            Err(err) => {
-                log_to_console(&format!("Realtime poll error: {}", err), Status::ERROR);
+        poll_once(&mut poller);
+        loops += 1;
+        if let Some(max) = max_loops {
+            if loops >= max {
+                break;
             }
         }
-
         thread::sleep(Duration::from_millis(500));
     }
 }
 
-pub fn save_realtime_commands() -> Result<()> {
-    // Fails only if watcher cannot start
-    let rx = match watch_cmdlog() {
+fn save_commands_on_poll() {
+    let path = format!(
+        "{}/Documents/playground/basket/.cmdlog.json",
+        std::env::var("HOME").expect("HOME not set")
+    );
+    save_commands_on_poll_with(&path, None);
+}
+
+fn poll_once(poller: &mut FilePoller) {
+    match poller.poll() {
+        Ok(lines) => {
+            for line in lines {
+                handle_realtime_line(&line);
+            }
+        }
+        Err(err) => {
+            log_to_console(&format!("Realtime poll error: {}", err), Status::ERROR);
+        }
+    }
+}
+
+fn save_realtime_commands_with<W, P>(watcher: W, poller: P, max_events: Option<usize>) -> Result<()>
+where
+    W: FnOnce() -> Result<Receiver<WatchEvent>>,
+    P: FnOnce(),
+{
+    let rx = match watcher() {
         Ok(rx) => rx,
         Err(err) => {
             log_to_console(
                 &format!("Realtime watcher failed, falling back to polling: {}", err),
                 Status::WARNING,
             );
-            save_commands_on_poll();
+            poller();
             return Ok(());
         }
     };
 
-    for event in rx {
-        match event {
-            WatchEvent::Line(line) => {
-                handle_realtime_line(&line);
-            }
+    process_watch_events(rx, max_events);
 
-            WatchEvent::Error(err) => {
-                log_to_console(&format!("Realtime watcher error: {}", err), Status::ERROR);
-            }
+    Ok(())
+}
+
+pub fn save_realtime_commands() -> Result<()> {
+    save_realtime_commands_with(watch_cmdlog, save_commands_on_poll, None)
+}
+
+pub mod testing {
+    use super::{
+        handle_realtime_line_with, poll_once, process_notify_stream, FilePoller, WatchEvent,
+    };
+    use std::sync::mpsc::{channel, Receiver, Sender};
+
+    pub struct Poller {
+        inner: FilePoller,
+    }
+
+    impl Poller {
+        pub fn new(path: &str) -> std::io::Result<Self> {
+            Ok(Self {
+                inner: FilePoller::new(path)?,
+            })
+        }
+
+        pub fn poll(&mut self) -> std::io::Result<Vec<String>> {
+            self.inner.poll()
+        }
+
+        pub fn poll_once(&mut self) {
+            poll_once(&mut self.inner);
         }
     }
 
-    Ok(())
+    pub fn handle_line_with<F>(line: &str, save_fn: F)
+    where
+        F: FnOnce(&str, i32, i64) -> std::result::Result<(), Box<dyn std::error::Error>>,
+    {
+        handle_realtime_line_with(line, save_fn);
+    }
+
+    pub fn channel_with_events(events: Vec<WatchEvent>) -> Receiver<WatchEvent> {
+        let (tx, rx) = channel();
+        for event in events {
+            let _ = tx.send(event);
+        }
+        rx
+    }
+
+    pub fn run_with_events(rx: Receiver<WatchEvent>, max_events: Option<usize>) {
+        super::process_watch_events(rx, max_events);
+    }
+
+    pub fn save_realtime_with<W, P>(
+        watcher: W,
+        poller: P,
+        max_events: Option<usize>,
+    ) -> notify::Result<()>
+    where
+        W: FnOnce() -> notify::Result<Receiver<WatchEvent>>,
+        P: FnOnce(),
+    {
+        super::save_realtime_commands_with(watcher, poller, max_events)
+    }
+
+    pub fn run_notify_events<I>(events: I, path: &str, out_tx: &Sender<WatchEvent>)
+    where
+        I: IntoIterator<Item = notify::Result<notify::Event>>,
+    {
+        process_notify_stream(events, path, out_tx);
+    }
+
+    pub fn run_polling_once(path: &str) {
+        super::save_commands_on_poll_with(path, Some(1));
+    }
 }

@@ -154,9 +154,33 @@ pub struct OverviewTables {
 pub fn get_overview_tables() -> Result<OverviewTables, Box<dyn std::error::Error>> {
     let entries = get_all_history_entries()?;
 
-    Ok(OverviewTables {
-        top_commands: top_5_most_used_commands(&entries),
-        top_unsuccessful: top_5_most_unsuccessful_commands(&entries),
-        mistyped_commands: most_misstyped_command(&entries),
-    })
+    Ok(get_overview_tables_from_entries(&entries))
+}
+
+pub fn get_overview_tables_from_entries(entries: &[Entry]) -> OverviewTables {
+    OverviewTables {
+        top_commands: top_5_most_used_commands(entries),
+        top_unsuccessful: top_5_most_unsuccessful_commands(entries),
+        mistyped_commands: most_misstyped_command(entries),
+    }
+}
+
+pub mod testing {
+    use super::*;
+
+    pub fn calculate_command_occurrence_for_test(command: &String, entries: &[Entry]) -> i32 {
+        calculate_command_occurance(command, entries)
+    }
+
+    pub fn top_5_most_used_commands_for_test(entries: &[Entry]) -> Vec<Vec<String>> {
+        top_5_most_used_commands(entries)
+    }
+
+    pub fn top_5_most_unsuccessful_commands_for_test(entries: &[Entry]) -> Vec<Vec<String>> {
+        top_5_most_unsuccessful_commands(entries)
+    }
+
+    pub fn most_misstyped_command_for_test(entries: &[Entry]) -> Vec<Vec<String>> {
+        most_misstyped_command(entries)
+    }
 }

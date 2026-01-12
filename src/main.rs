@@ -1,18 +1,12 @@
-mod analysis;
-mod ids;
-mod runtime;
-mod storage;
-mod ui;
-mod util;
+#[cfg(not(test))]
+use basket::app::{default_deps, run_app};
 
-use runtime::init::setup;
-use storage::db;
-use storage::history;
-use ui::{run as run_tui, TuiExit};
-use util::helpers::{detect_user_shell, is_history_read};
-use util::logging::{log_to_console, Status};
-
+#[cfg(not(test))]
 fn main() {
+    run_main(|| run_app(&default_deps()));
+}
+
+fn run_main<F: FnOnce()>(run: F) {
     println!(
         r#"
     _               _        _
@@ -24,47 +18,18 @@ fn main() {
 
        "#
     );
-    // Only run this for the first time the program is run
-    // we know this by check if th db is empty
-    // Load history from the file and insert it into the database
-    if !is_history_read() {
-        // Connect to the database
-        match db::establish_connection() {
-            Ok(conn) => {
-                // Create the database and table if they don't exist
-                if let Err(e) = db::create_db(&conn) {
-                    log_to_console(&format!("Failed to create database: {}", e), Status::ERROR);
-                    return;
-                }
-                if let Err(e) = db::ensure_user_column(&conn) {
-                    log_to_console(&format!("Failed to update schema: {}", e), Status::ERROR);
-                    return;
-                }
-                log_to_console("Database connection established.", Status::SUCCESS);
-            }
-            Err(e) => log_to_console(
-                &format!("Failed to establish database connection: {}", e),
-                Status::ERROR,
-            ),
-        }
-        if let Err(e) = history::save_history() {
-            log_to_console(&format!("Failed to load history: {}", e), Status::ERROR);
-        }
-    }
+    run();
+}
 
-    if let Ok(conn) = db::establish_connection() {
-        if let Err(e) = db::ensure_user_column(&conn) {
-            log_to_console(&format!("Failed to update schema: {}", e), Status::ERROR);
-        }
-    }
+#[cfg(test)]
+mod tests {
+    use super::run_main;
+    use std::cell::Cell;
 
-    let _ = setup();
-    detect_user_shell();
-
-    match run_tui() {
-        Ok(TuiExit::Exit) => {}
-        Err(err) => {
-            log_to_console(&format!("TUI failed: {}", err), Status::ERROR);
-        }
+    #[test]
+    fn run_main_invokes_runner() {
+        let called = Cell::new(false);
+        run_main(|| called.set(true));
+        assert!(called.get());
     }
 }

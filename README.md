@@ -1,6 +1,7 @@
 # Basket
 
 [![CI](https://github.com/YasinYA/basket/actions/workflows/ci.yml/badge.svg)](https://github.com/YasinYA/basket/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/YasinYA/basket/branch/main/graph/badge.svg)](https://codecov.io/gh/YasinYA/basket)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Crates.io](https://img.shields.io/crates/v/basket.svg)](https://crates.io/crates/basket)
 

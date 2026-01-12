@@ -3,7 +3,11 @@ use rusqlite::{params, Connection, Result};
 use std::error::Error;
 use uuid::Uuid;
 
-const DB_FILE: &str = "/Users/yasinya/basket.db";
+const DEFAULT_DB_FILE: &str = "/Users/yasinya/basket.db";
+
+fn db_path() -> String {
+    std::env::var("BASKET_DB_PATH").unwrap_or_else(|_| DEFAULT_DB_FILE.to_string())
+}
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -26,7 +30,7 @@ pub struct Entry {
 
 pub fn establish_connection() -> Result<Connection, Box<dyn Error>> {
     // Attempt to open the connection to the database
-    let conn = match Connection::open(DB_FILE) {
+    let conn = match Connection::open(db_path()) {
         Ok(c) => c,
         Err(e) => {
             log_to_console(
@@ -71,26 +75,7 @@ pub fn insert_history_entry(
     let status = status.unwrap_or(CommandStatus::Unknown);
     match establish_connection() {
         Ok(conn) => {
-            let id = Uuid::new_v4();
-            // Attempt to insert data into the table
-            if let Err(e) = conn.execute(
-                "INSERT INTO history (id, timestamp, command, date, status, user) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![
-                    id.to_string(),
-                    timestamp,
-                    command,
-                    date,
-                    format!("{:?}", status),
-                    user
-                ],
-            ) {
-                log_to_console(
-                    &format!("Failed to insert history entry: {}", e),
-                    Status::ERROR,
-                );
-                eprintln!();
-                return Err(Box::new(e));
-            }
+            insert_history_entry_with_conn(&conn, timestamp, command, date, Some(status), user)?;
         }
         Err(e) => log_to_console(
             &format!("Failed to establish database connection: {}", e),
@@ -98,6 +83,37 @@ pub fn insert_history_entry(
         ),
     }
 
+    Ok(())
+}
+
+pub fn insert_history_entry_with_conn(
+    conn: &Connection,
+    timestamp: &i64,
+    command: &str,
+    date: &str,
+    status: Option<CommandStatus>,
+    user: &str,
+) -> Result<(), Box<dyn Error>> {
+    let status = status.unwrap_or(CommandStatus::Unknown);
+    let id = Uuid::new_v4();
+    if let Err(e) = conn.execute(
+        "INSERT INTO history (id, timestamp, command, date, status, user) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            id.to_string(),
+            timestamp,
+            command,
+            date,
+            format!("{:?}", status),
+            user
+        ],
+    ) {
+        log_to_console(
+            &format!("Failed to insert history entry: {}", e),
+            Status::ERROR,
+        );
+        eprintln!();
+        return Err(Box::new(e));
+    }
     Ok(())
 }
 
@@ -119,6 +135,10 @@ fn parse_status(s: &str) -> CommandStatus {
 
 pub fn get_all_history_entries() -> Result<Vec<Entry>, Box<dyn Error>> {
     let conn = establish_connection()?;
+    get_all_history_entries_with_conn(&conn)
+}
+
+pub fn get_all_history_entries_with_conn(conn: &Connection) -> Result<Vec<Entry>, Box<dyn Error>> {
     let mut stmt =
         conn.prepare("SELECT id, timestamp, command, date, status, user FROM history")?;
 
@@ -136,17 +156,16 @@ pub fn get_all_history_entries() -> Result<Vec<Entry>, Box<dyn Error>> {
 
     let entries: Result<Vec<Entry>, _> = entries_iter.collect();
 
-    // log_to_console(
-    //     &format!("Failed to establish the database connection: {}", e),
-    //     Status::ERROR,
-    // );
-
     Ok(entries?)
 }
 
 pub fn get_last_entry() -> Result<Entry, Box<dyn Error>> {
     let conn = establish_connection()?;
 
+    get_last_entry_with_conn(&conn)
+}
+
+pub fn get_last_entry_with_conn(conn: &Connection) -> Result<Entry, Box<dyn Error>> {
     let mut stmt = conn.prepare(
         "SELECT id, timestamp, command, date, status, user FROM history ORDER BY date DESC LIMIT 1",
     )?;
@@ -172,6 +191,13 @@ pub fn get_last_entry() -> Result<Entry, Box<dyn Error>> {
 
 pub fn get_recent_entries(limit: i64) -> Result<Vec<Entry>, Box<dyn Error>> {
     let conn = establish_connection()?;
+    get_recent_entries_with_conn(&conn, limit)
+}
+
+pub fn get_recent_entries_with_conn(
+    conn: &Connection,
+    limit: i64,
+) -> Result<Vec<Entry>, Box<dyn Error>> {
     let mut stmt = conn.prepare(
         "SELECT id, timestamp, command, date, status, user FROM history ORDER BY timestamp DESC LIMIT ?1",
     )?;

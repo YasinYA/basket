@@ -2,9 +2,8 @@ use crate::util::helpers::{detect_user_shell, ShellType};
 use std::io::Write;
 use std::{env, fs, path};
 
-fn ensure_zshrc_sources_hook() -> std::io::Result<()> {
-    let home = env::var("HOME").unwrap();
-    let zshrc_path = path::PathBuf::from(&home).join(".zshrc");
+fn ensure_zshrc_sources_hook_at(home: &str) -> std::io::Result<()> {
+    let zshrc_path = path::PathBuf::from(home).join(".zshrc");
     let source_line = r#"
 # basket command logger
 source "$HOME/.basket.zsh"
@@ -23,9 +22,8 @@ source "$HOME/.basket.zsh"
     Ok(())
 }
 
-fn setup_zsh() -> std::io::Result<()> {
-    let home = env::var("HOME").unwrap();
-    let hook_path = path::PathBuf::from(&home).join(".basket.zsh");
+fn setup_zsh_with_home(home: &str) -> std::io::Result<()> {
+    let hook_path = path::PathBuf::from(home).join(".basket.zsh");
 
     let hook_content = r#"
 CMDLOG_FILE="$HOME/Documents/playground/basket/.cmdlog.json"
@@ -48,13 +46,12 @@ precmd() {
 "#;
 
     fs::write(&hook_path, hook_content)?;
-    ensure_zshrc_sources_hook()?;
+    ensure_zshrc_sources_hook_at(home)?;
     Ok(())
 }
 
-fn setup_bash() -> std::io::Result<()> {
-    let home = env::var("HOME").unwrap();
-    let bashrc = path::PathBuf::from(&home).join(".bashrc");
+fn setup_bash_with_home(home: &str) -> std::io::Result<()> {
+    let bashrc = path::PathBuf::from(home).join(".bashrc");
 
     let hook = r#"
 # basket command logger
@@ -79,9 +76,31 @@ printf "{\"cmd\":\"%s\",\"status\":%d},\"timestamp\":%d\n" "$cmd" "$status" "$ts
     Ok(())
 }
 
+fn setup_zsh() -> std::io::Result<()> {
+    let home = env::var("HOME").unwrap();
+    setup_zsh_with_home(&home)
+}
+
+fn setup_bash() -> std::io::Result<()> {
+    let home = env::var("HOME").unwrap();
+    setup_bash_with_home(&home)
+}
+
 pub fn setup() -> std::io::Result<()> {
     match detect_user_shell() {
         ShellType::ZSH(_) => setup_zsh(),
         ShellType::BASH(_) => setup_bash(),
+    }
+}
+
+pub mod testing {
+    use super::{setup_bash_with_home, setup_zsh_with_home};
+
+    pub fn setup_bash(home: &str) -> std::io::Result<()> {
+        setup_bash_with_home(home)
+    }
+
+    pub fn setup_zsh(home: &str) -> std::io::Result<()> {
+        setup_zsh_with_home(home)
     }
 }
