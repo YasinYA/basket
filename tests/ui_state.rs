@@ -6,6 +6,7 @@ use std::time::Duration;
 fn handle_key_events_cover_menu_and_overview() {
     let menu_items = ["View overview", "Start realtime watcher", "Exit"];
     let mut state = TestState::new();
+    let theme_count = basket::ui::testing::theme_count_for_test();
 
     assert_eq!(state.menu_index(), 0);
     state.handle_key(KeyCode::Down, &menu_items);
@@ -16,6 +17,10 @@ fn handle_key_events_cover_menu_and_overview() {
     assert_eq!(state.menu_index(), menu_items.len() - 1);
     state.handle_key(KeyCode::Down, &menu_items);
     assert_eq!(state.menu_index(), 0);
+
+    let before_theme = state.theme_index();
+    state.handle_key(KeyCode::Char('p'), &menu_items);
+    assert_eq!(state.theme_index(), (before_theme + 1) % theme_count);
 
     state.handle_key(KeyCode::Enter, &menu_items);
     assert_eq!(state.screen(), "overview");

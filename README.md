@@ -65,6 +65,7 @@ basket
 Menu:
 - Up/Down: move
 - Enter: select
+- p: theme
 - q: quit
 
 Overview:
@@ -75,10 +76,12 @@ Overview:
 - s: sort (tables)
 - /: filter (tables)
 - x: clear filter
+- p: theme
 - b: back
 - q: quit
 
 Watcher:
+- p: theme
 - b: back
 - q: quit
 

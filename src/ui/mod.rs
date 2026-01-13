@@ -23,7 +23,9 @@ use crate::ids::{detect_intrusions, IntrusionFinding};
 use crate::runtime::realtime::save_realtime_commands;
 use crate::storage::db::{get_recent_entries, CommandStatus, Entry};
 
+#[derive(Copy, Clone)]
 struct Theme {
+    name: &'static str,
     gold: Color,
     gold_bright: Color,
     menu_inactive: Color,
@@ -43,39 +45,114 @@ struct Theme {
     legend_dim: Color,
 }
 
-const THEME: Theme = Theme {
-    gold: Color::Rgb(148, 92, 255),
-    gold_bright: Color::Rgb(200, 160, 255),
-    menu_inactive: Color::White,
-    menu_active: Color::Rgb(148, 92, 255),
-    menu_border: Color::Rgb(148, 92, 255),
-    footer_border: Color::Rgb(148, 92, 255),
-    header_text: Color::Rgb(186, 147, 255),
-    table_border: Color::Rgb(148, 92, 255),
-    table_header: Color::Rgb(190, 160, 255),
-    table_row_even: Color::White,
-    table_row_odd: Color::Gray,
-    table_active_bg: Color::Rgb(148, 92, 255),
-    table_active_fg: Color::White,
-    logo_colors: [
-        Color::Rgb(210, 185, 255),
-        Color::Rgb(186, 147, 255),
-        Color::Rgb(164, 110, 255),
-        Color::Rgb(148, 92, 255),
-        Color::Rgb(164, 110, 255),
-        Color::Rgb(186, 147, 255),
-    ],
-    chart_palette: [
-        Color::Rgb(148, 92, 255),
-        Color::Rgb(98, 76, 255),
-        Color::Rgb(186, 147, 255),
-        Color::Rgb(230, 180, 255),
-        Color::Rgb(122, 102, 255),
-        Color::Rgb(200, 160, 255),
-    ],
-    legend_text: Color::Gray,
-    legend_dim: Color::DarkGray,
-};
+const THEMES: [Theme; 3] = [
+    Theme {
+        name: "Aurora",
+        gold: Color::Rgb(148, 92, 255),
+        gold_bright: Color::Rgb(200, 160, 255),
+        menu_inactive: Color::White,
+        menu_active: Color::Rgb(148, 92, 255),
+        menu_border: Color::Rgb(148, 92, 255),
+        footer_border: Color::Rgb(148, 92, 255),
+        header_text: Color::Rgb(186, 147, 255),
+        table_border: Color::Rgb(148, 92, 255),
+        table_header: Color::Rgb(190, 160, 255),
+        table_row_even: Color::White,
+        table_row_odd: Color::Gray,
+        table_active_bg: Color::Rgb(148, 92, 255),
+        table_active_fg: Color::White,
+        logo_colors: [
+            Color::Rgb(210, 185, 255),
+            Color::Rgb(186, 147, 255),
+            Color::Rgb(164, 110, 255),
+            Color::Rgb(148, 92, 255),
+            Color::Rgb(164, 110, 255),
+            Color::Rgb(186, 147, 255),
+        ],
+        chart_palette: [
+            Color::Rgb(148, 92, 255),
+            Color::Rgb(98, 76, 255),
+            Color::Rgb(186, 147, 255),
+            Color::Rgb(230, 180, 255),
+            Color::Rgb(122, 102, 255),
+            Color::Rgb(200, 160, 255),
+        ],
+        legend_text: Color::Gray,
+        legend_dim: Color::DarkGray,
+    },
+    Theme {
+        name: "Solar",
+        gold: Color::Rgb(255, 170, 60),
+        gold_bright: Color::Rgb(255, 210, 140),
+        menu_inactive: Color::White,
+        menu_active: Color::Rgb(255, 170, 60),
+        menu_border: Color::Rgb(255, 170, 60),
+        footer_border: Color::Rgb(255, 170, 60),
+        header_text: Color::Rgb(255, 210, 140),
+        table_border: Color::Rgb(255, 170, 60),
+        table_header: Color::Rgb(255, 200, 120),
+        table_row_even: Color::White,
+        table_row_odd: Color::Gray,
+        table_active_bg: Color::Rgb(255, 170, 60),
+        table_active_fg: Color::White,
+        logo_colors: [
+            Color::Rgb(255, 220, 160),
+            Color::Rgb(255, 200, 120),
+            Color::Rgb(255, 170, 60),
+            Color::Rgb(230, 140, 40),
+            Color::Rgb(255, 170, 60),
+            Color::Rgb(255, 200, 120),
+        ],
+        chart_palette: [
+            Color::Rgb(255, 170, 60),
+            Color::Rgb(230, 140, 40),
+            Color::Rgb(255, 200, 120),
+            Color::Rgb(255, 220, 160),
+            Color::Rgb(210, 120, 30),
+            Color::Rgb(255, 190, 90),
+        ],
+        legend_text: Color::Gray,
+        legend_dim: Color::DarkGray,
+    },
+    Theme {
+        name: "Ocean",
+        gold: Color::Rgb(60, 170, 200),
+        gold_bright: Color::Rgb(140, 220, 235),
+        menu_inactive: Color::White,
+        menu_active: Color::Rgb(60, 170, 200),
+        menu_border: Color::Rgb(60, 170, 200),
+        footer_border: Color::Rgb(60, 170, 200),
+        header_text: Color::Rgb(140, 220, 235),
+        table_border: Color::Rgb(60, 170, 200),
+        table_header: Color::Rgb(120, 210, 230),
+        table_row_even: Color::White,
+        table_row_odd: Color::Gray,
+        table_active_bg: Color::Rgb(60, 170, 200),
+        table_active_fg: Color::White,
+        logo_colors: [
+            Color::Rgb(170, 235, 245),
+            Color::Rgb(140, 220, 235),
+            Color::Rgb(90, 190, 220),
+            Color::Rgb(60, 170, 200),
+            Color::Rgb(90, 190, 220),
+            Color::Rgb(140, 220, 235),
+        ],
+        chart_palette: [
+            Color::Rgb(60, 170, 200),
+            Color::Rgb(40, 140, 190),
+            Color::Rgb(120, 210, 230),
+            Color::Rgb(170, 235, 245),
+            Color::Rgb(80, 160, 210),
+            Color::Rgb(100, 200, 225),
+        ],
+        legend_text: Color::Gray,
+        legend_dim: Color::DarkGray,
+    },
+];
+
+fn theme_by_index(index: usize) -> &'static Theme {
+    &THEMES[index % THEMES.len()]
+}
 
 pub enum TuiExit {
     Exit,
@@ -115,6 +192,7 @@ struct AppState {
     recent_rows: Vec<Vec<String>>,
     intrusion_rows: Vec<Vec<String>>,
     last_refresh: Instant,
+    theme_index: usize,
 }
 
 impl AppState {
@@ -140,6 +218,7 @@ impl AppState {
             recent_rows: Vec::new(),
             intrusion_rows: Vec::new(),
             last_refresh: Instant::now(),
+            theme_index: 0,
         }
     }
 }
@@ -177,8 +256,9 @@ fn run_loop(
             app.screen = Screen::Error(err);
         }
 
+        let theme = theme_by_index(app.theme_index);
         terminal.draw(|frame| match &app.screen {
-            Screen::Menu => render_menu(frame, &menu_items, app.menu_index, app.logo_phase),
+            Screen::Menu => render_menu(frame, &menu_items, app.menu_index, app.logo_phase, theme),
             Screen::Overview => render_overview(
                 frame,
                 app.overview.as_ref(),
@@ -194,9 +274,10 @@ fn run_loop(
                 &app.filter_buffer,
                 &app.recent_rows,
                 &app.intrusion_rows,
+                theme,
             ),
-            Screen::Watcher => render_watcher(frame, app.watcher_spinner),
-            Screen::Error(message) => render_error(frame, message),
+            Screen::Watcher => render_watcher(frame, app.watcher_spinner, theme),
+            Screen::Error(message) => render_error(frame, message, theme),
         })?;
 
         if event::poll(Duration::from_millis(200))? {
@@ -269,6 +350,11 @@ fn handle_key_event(
             }
             _ => {}
         }
+        return None;
+    }
+
+    if let KeyCode::Char('p') = key {
+        app.theme_index = (app.theme_index + 1) % THEMES.len();
         return None;
     }
 
@@ -428,7 +514,13 @@ fn handle_key_event(
     None
 }
 
-fn render_menu(frame: &mut Frame, items: &[&str], selected: usize, logo_phase: usize) {
+fn render_menu(
+    frame: &mut Frame,
+    items: &[&str],
+    selected: usize,
+    logo_phase: usize,
+    theme: &Theme,
+) {
     let size = frame.area();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -443,20 +535,20 @@ fn render_menu(frame: &mut Frame, items: &[&str], selected: usize, logo_phase: u
     let powered_by = Paragraph::new("Get insightful view from what you type everyday")
         .style(
             Style::default()
-                .fg(THEME.header_text)
+                .fg(theme.header_text)
                 .add_modifier(Modifier::BOLD),
         )
         .block(
             Block::default()
                 .borders(Borders::ALL)
                 .title("Basket")
-                .border_style(Style::default().fg(THEME.gold)),
+                .border_style(Style::default().fg(theme.gold)),
         );
 
-    let logo = Paragraph::new(basket_logo_text(logo_phase)).block(
+    let logo = Paragraph::new(basket_logo_text(logo_phase, theme)).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(THEME.gold)),
+            .border_style(Style::default().fg(theme.gold)),
     );
 
     let list_items: Vec<ListItem> = items
@@ -466,10 +558,10 @@ fn render_menu(frame: &mut Frame, items: &[&str], selected: usize, logo_phase: u
             let prefix = if idx == selected { "> " } else { "  " };
             let item_style = if idx == selected {
                 Style::default()
-                    .fg(THEME.menu_active)
+                    .fg(theme.menu_active)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(THEME.menu_inactive)
+                Style::default().fg(theme.menu_inactive)
             };
             ListItem::new(Line::from(vec![
                 Span::styled(prefix, item_style),
@@ -483,17 +575,20 @@ fn render_menu(frame: &mut Frame, items: &[&str], selected: usize, logo_phase: u
             Block::default()
                 .borders(Borders::ALL)
                 .title("Menu")
-                .border_style(Style::default().fg(THEME.menu_border)),
+                .border_style(Style::default().fg(theme.menu_border)),
         )
         .highlight_style(Style::default());
 
-    let footer = Paragraph::new("Use Up/Down + Enter. Press q to quit.")
-        .block(
-            Block::default()
-                .borders(Borders::TOP)
-                .border_style(Style::default().fg(THEME.footer_border)),
-        )
-        .style(Style::default().fg(THEME.footer_border));
+    let footer = Paragraph::new(format!(
+        "Use Up/Down + Enter. p: theme ({})  q: quit.",
+        theme.name
+    ))
+    .block(
+        Block::default()
+            .borders(Borders::TOP)
+            .border_style(Style::default().fg(theme.footer_border)),
+    )
+    .style(Style::default().fg(theme.footer_border));
 
     frame.render_widget(powered_by, chunks[0]);
     frame.render_widget(logo, chunks[1]);
@@ -516,6 +611,7 @@ fn render_overview(
     filter_buffer: &str,
     recent_rows: &[Vec<String>],
     intrusion_rows: &[Vec<String>],
+    theme: &Theme,
 ) {
     let size = frame.area();
     let layout = Layout::default()
@@ -553,6 +649,7 @@ fn render_overview(
                     &top_commands,
                     table_selection[0],
                     table_index == 0,
+                    theme,
                 );
                 render_table(
                     frame,
@@ -561,6 +658,7 @@ fn render_overview(
                     &top_unsuccessful,
                     table_selection[1],
                     table_index == 1,
+                    theme,
                 );
                 render_table(
                     frame,
@@ -569,6 +667,7 @@ fn render_overview(
                     &mistyped_commands,
                     table_selection[2],
                     table_index == 2,
+                    theme,
                 );
             }
             OverviewView::Charts => {
@@ -589,6 +688,7 @@ fn render_overview(
                     chart_progress,
                     chart_selection[0],
                     chart_index == 0,
+                    theme,
                 );
                 render_chart(
                     frame,
@@ -598,6 +698,7 @@ fn render_overview(
                     chart_progress,
                     chart_selection[1],
                     chart_index == 1,
+                    theme,
                 );
                 render_chart(
                     frame,
@@ -607,6 +708,7 @@ fn render_overview(
                     chart_progress,
                     chart_selection[2],
                     chart_index == 2,
+                    theme,
                 );
             }
         }
@@ -615,13 +717,13 @@ fn render_overview(
             Block::default()
                 .borders(Borders::ALL)
                 .title("Overview")
-                .border_style(Style::default().fg(THEME.gold)),
+                .border_style(Style::default().fg(theme.gold)),
         );
         frame.render_widget(empty, layout[0]);
     }
 
-    render_recent_table(frame, layout[1], recent_rows);
-    render_intrusion_table(frame, layout[2], intrusion_rows);
+    render_recent_table(frame, layout[1], recent_rows, theme);
+    render_intrusion_table(frame, layout[2], intrusion_rows, theme);
 
     let sort_label = if sort_asc { "A->Z" } else { "Z->A" };
     let filter_label = if filter_query.is_empty() {
@@ -631,38 +733,39 @@ fn render_overview(
     };
     let footer = match view {
         OverviewView::Tables => Paragraph::new(format!(
-            "t: tables  c: charts  ←/→: table  ↑/↓: row  s: sort({})  /: filter({})  x: clear  b: back  q: quit",
-            sort_label, filter_label
+            "t: tables  c: charts  ←/→: table  ↑/↓: row  s: sort({})  /: filter({})  x: clear  p: theme({})  b: back  q: quit",
+            sort_label, filter_label, theme.name
         )),
-        OverviewView::Charts => Paragraph::new(
-            "t: tables  c: charts  ←/→: chart  ↑/↓: slice  b: back  q: quit",
-        ),
+        OverviewView::Charts => Paragraph::new(format!(
+            "t: tables  c: charts  ←/→: chart  ↑/↓: slice  p: theme({})  b: back  q: quit",
+            theme.name
+        )),
     }
     .block(
         Block::default()
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(THEME.footer_border)),
+            .border_style(Style::default().fg(theme.footer_border)),
     );
     frame.render_widget(footer, layout[3]);
 
     if filter_input {
-        render_filter_prompt(frame, layout[0], filter_buffer);
+        render_filter_prompt(frame, layout[0], filter_buffer, theme);
     }
 }
 
-fn render_error(frame: &mut Frame, message: &str) {
+fn render_error(frame: &mut Frame, message: &str, theme: &Theme) {
     let size = frame.area();
     let block = Block::default()
         .borders(Borders::ALL)
         .title("Error")
-        .border_style(Style::default().fg(THEME.gold));
+        .border_style(Style::default().fg(theme.gold));
     let paragraph = Paragraph::new(message)
         .block(block)
         .style(Style::default().fg(Color::Red));
     frame.render_widget(paragraph, size);
 }
 
-fn render_watcher(frame: &mut Frame, spinner_index: usize) {
+fn render_watcher(frame: &mut Frame, spinner_index: usize, theme: &Theme) {
     let size = frame.area();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -680,21 +783,21 @@ fn render_watcher(frame: &mut Frame, spinner_index: usize) {
             Block::default()
                 .borders(Borders::ALL)
                 .title("Watcher")
-                .border_style(Style::default().fg(THEME.gold)),
+                .border_style(Style::default().fg(theme.gold)),
         )
         .style(
             Style::default()
-                .fg(THEME.menu_inactive)
+                .fg(theme.menu_inactive)
                 .add_modifier(Modifier::BOLD),
         );
 
-    let footer = Paragraph::new("b: back  q: quit")
+    let footer = Paragraph::new(format!("p: theme({})  b: back  q: quit", theme.name))
         .block(
             Block::default()
                 .borders(Borders::TOP)
-                .border_style(Style::default().fg(THEME.footer_border)),
+                .border_style(Style::default().fg(theme.footer_border)),
         )
-        .style(Style::default().fg(THEME.footer_border));
+        .style(Style::default().fg(theme.footer_border));
 
     frame.render_widget(body, chunks[0]);
     frame.render_widget(footer, chunks[1]);
@@ -711,6 +814,7 @@ fn render_table(
     data: &[Vec<String>],
     selected_index: usize,
     is_focused: bool,
+    theme: &Theme,
 ) {
     let selected = selected_index.min(data.len().saturating_sub(1));
     let rows: Vec<Row> = if data.is_empty() {
@@ -724,7 +828,7 @@ fn render_table(
             "─".repeat(col1_width.max(1)),
             "─".repeat(col2_width.max(1)),
         ])
-        .style(Style::default().fg(THEME.table_border));
+        .style(Style::default().fg(theme.table_border));
 
         let mut out = Vec::with_capacity(data.len() + 1);
         out.push(separator);
@@ -734,11 +838,11 @@ fn render_table(
             let right = row.get(1).cloned().unwrap_or_default();
             let style = if idx % 2 == 0 {
                 Style::default()
-                    .fg(THEME.table_row_even)
+                    .fg(theme.table_row_even)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
-                    .fg(THEME.table_row_odd)
+                    .fg(theme.table_row_odd)
                     .add_modifier(Modifier::BOLD)
             };
             if is_focused && idx == selected {
@@ -766,7 +870,7 @@ fn render_table(
     let header = Row::new(vec!["Command", "Count"])
         .style(
             Style::default()
-                .fg(THEME.table_header)
+                .fg(theme.table_header)
                 .add_modifier(Modifier::BOLD),
         )
         .height(3)
@@ -781,13 +885,13 @@ fn render_table(
         Block::default()
             .borders(Borders::ALL)
             .title(title)
-            .border_style(Style::default().fg(THEME.table_border)),
+            .border_style(Style::default().fg(theme.table_border)),
     )
     .column_spacing(3)
     .row_highlight_style(
         Style::default()
-            .fg(THEME.table_active_fg)
-            .bg(THEME.table_active_bg)
+            .fg(theme.table_active_fg)
+            .bg(theme.table_active_bg)
             .add_modifier(Modifier::BOLD),
     )
     .highlight_symbol("");
@@ -811,6 +915,7 @@ fn render_chart(
     progress: f32,
     selected_index: usize,
     is_focused: bool,
+    theme: &Theme,
 ) {
     if data.is_empty() {
         let empty = Paragraph::new("No data")
@@ -818,9 +923,9 @@ fn render_chart(
                 Block::default()
                     .borders(Borders::ALL)
                     .title(title)
-                    .border_style(Style::default().fg(THEME.gold)),
+                    .border_style(Style::default().fg(theme.gold)),
             )
-            .style(Style::default().fg(THEME.legend_dim));
+            .style(Style::default().fg(theme.legend_dim));
         frame.render_widget(empty, area);
         return;
     }
@@ -851,7 +956,7 @@ fn render_chart(
         values.push(value);
     }
 
-    let colors = THEME.chart_palette;
+    let colors = theme.chart_palette;
 
     let anim = progress.clamp(0.05, 1.0) as f64;
     let slices: Vec<PieSlice<'_>> = labels
@@ -874,7 +979,7 @@ fn render_chart(
             Block::default()
                 .borders(Borders::ALL)
                 .title(title)
-                .border_style(Style::default().fg(THEME.gold)),
+                .border_style(Style::default().fg(theme.gold)),
         )
         .show_legend(false)
         .show_percentages(false)
@@ -893,6 +998,7 @@ fn render_chart(
             &colors,
             selected_index,
             is_focused,
+            theme,
         );
     }
 }
@@ -997,7 +1103,7 @@ fn filter_sort_rows(data: &[Vec<String>], filter: &str, asc: bool) -> Vec<Vec<St
     rows
 }
 
-fn render_filter_prompt(frame: &mut Frame, area: Rect, buffer: &str) {
+fn render_filter_prompt(frame: &mut Frame, area: Rect, buffer: &str, theme: &Theme) {
     let width = area.width.saturating_sub(4).min(60);
     let height = 3;
     let x = area.x + (area.width.saturating_sub(width)) / 2;
@@ -1015,13 +1121,13 @@ fn render_filter_prompt(frame: &mut Frame, area: Rect, buffer: &str) {
             Block::default()
                 .borders(Borders::ALL)
                 .title("Filter")
-                .border_style(Style::default().fg(THEME.gold)),
+                .border_style(Style::default().fg(theme.gold)),
         )
-        .style(Style::default().fg(THEME.gold_bright));
+        .style(Style::default().fg(theme.gold_bright));
     frame.render_widget(prompt, rect);
 }
 
-fn render_recent_table(frame: &mut Frame, area: Rect, data: &[Vec<String>]) {
+fn render_recent_table(frame: &mut Frame, area: Rect, data: &[Vec<String>], theme: &Theme) {
     let rows: Vec<Row> = if data.is_empty() {
         vec![Row::new(vec![
             "No recent commands".to_string(),
@@ -1042,7 +1148,7 @@ fn render_recent_table(frame: &mut Frame, area: Rect, data: &[Vec<String>]) {
     let header = Row::new(vec!["Command", "Status", "When"])
         .style(
             Style::default()
-                .fg(THEME.table_header)
+                .fg(theme.table_header)
                 .add_modifier(Modifier::BOLD),
         )
         .height(1);
@@ -1060,14 +1166,14 @@ fn render_recent_table(frame: &mut Frame, area: Rect, data: &[Vec<String>]) {
         Block::default()
             .borders(Borders::ALL)
             .title("Recent Commands")
-            .border_style(Style::default().fg(THEME.table_border)),
+            .border_style(Style::default().fg(theme.table_border)),
     )
     .column_spacing(2);
 
     frame.render_widget(table, area);
 }
 
-fn render_intrusion_table(frame: &mut Frame, area: Rect, data: &[Vec<String>]) {
+fn render_intrusion_table(frame: &mut Frame, area: Rect, data: &[Vec<String>], theme: &Theme) {
     let rows: Vec<Row> = if data.is_empty() {
         vec![Row::new(vec![
             Cell::new(""),
@@ -1106,7 +1212,7 @@ fn render_intrusion_table(frame: &mut Frame, area: Rect, data: &[Vec<String>]) {
     let header = Row::new(vec!["", "Command", "Score", "User", "Reason", "When"])
         .style(
             Style::default()
-                .fg(THEME.table_header)
+                .fg(theme.table_header)
                 .add_modifier(Modifier::BOLD),
         )
         .height(1);
@@ -1127,7 +1233,7 @@ fn render_intrusion_table(frame: &mut Frame, area: Rect, data: &[Vec<String>]) {
         Block::default()
             .borders(Borders::ALL)
             .title("Potential Intrusion Signals")
-            .border_style(Style::default().fg(THEME.table_border)),
+            .border_style(Style::default().fg(theme.table_border)),
     )
     .column_spacing(2);
 
@@ -1142,6 +1248,7 @@ fn render_pie_legend(
     colors: &[Color],
     selected_index: usize,
     is_focused: bool,
+    theme: &Theme,
 ) {
     let total: f64 = values.iter().copied().sum();
     let max_label = area.width.saturating_sub(10) as usize;
@@ -1187,7 +1294,7 @@ fn render_pie_legend(
                     .fg(brighten_color(color, 40))
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(THEME.legend_text)
+                Style::default().fg(theme.legend_text)
             };
 
             let trimmed_label: String = label.chars().take(max_label).collect();
@@ -1210,7 +1317,7 @@ fn render_pie_legend(
         Block::default()
             .borders(Borders::ALL)
             .title(title)
-            .border_style(Style::default().fg(THEME.gold)),
+            .border_style(Style::default().fg(theme.gold)),
     );
     frame.render_widget(legend, area);
 }
@@ -1369,6 +1476,10 @@ pub mod testing {
             self.app.menu_index
         }
 
+        pub fn theme_index(&self) -> usize {
+            self.app.theme_index
+        }
+
         pub fn set_menu_index(&mut self, idx: usize) {
             self.app.menu_index = idx;
         }
@@ -1441,7 +1552,7 @@ pub mod testing {
         selected: usize,
         logo_phase: usize,
     ) {
-        render_menu(frame, items, selected, logo_phase);
+        render_menu(frame, items, selected, logo_phase, theme_by_index(0));
     }
 
     pub fn render_overview_for_test(
@@ -1475,15 +1586,16 @@ pub mod testing {
             filter_buffer,
             recent_rows,
             intrusion_rows,
+            theme_by_index(0),
         );
     }
 
     pub fn render_error_for_test(frame: &mut Frame, message: &str) {
-        render_error(frame, message);
+        render_error(frame, message, theme_by_index(0));
     }
 
     pub fn render_watcher_for_test(frame: &mut Frame, spinner_index: usize) {
-        render_watcher(frame, spinner_index);
+        render_watcher(frame, spinner_index, theme_by_index(0));
     }
 
     pub fn render_table_for_test(
@@ -1494,7 +1606,15 @@ pub mod testing {
         selected_index: usize,
         is_focused: bool,
     ) {
-        render_table(frame, area, title, data, selected_index, is_focused);
+        render_table(
+            frame,
+            area,
+            title,
+            data,
+            selected_index,
+            is_focused,
+            theme_by_index(0),
+        );
     }
 
     pub fn render_chart_for_test(
@@ -1514,19 +1634,20 @@ pub mod testing {
             progress,
             selected_index,
             is_focused,
+            theme_by_index(0),
         );
     }
 
     pub fn render_filter_prompt_for_test(frame: &mut Frame, area: Rect, buffer: &str) {
-        render_filter_prompt(frame, area, buffer);
+        render_filter_prompt(frame, area, buffer, theme_by_index(0));
     }
 
     pub fn render_recent_table_for_test(frame: &mut Frame, area: Rect, data: &[Vec<String>]) {
-        render_recent_table(frame, area, data);
+        render_recent_table(frame, area, data, theme_by_index(0));
     }
 
     pub fn render_intrusion_table_for_test(frame: &mut Frame, area: Rect, data: &[Vec<String>]) {
-        render_intrusion_table(frame, area, data);
+        render_intrusion_table(frame, area, data, theme_by_index(0));
     }
 
     pub fn render_pie_legend_for_test(
@@ -1546,6 +1667,7 @@ pub mod testing {
             colors,
             selected_index,
             is_focused,
+            theme_by_index(0),
         );
     }
 
@@ -1597,6 +1719,10 @@ pub mod testing {
         spinner_frames()
     }
 
+    pub fn theme_count_for_test() -> usize {
+        THEMES.len()
+    }
+
     pub fn refresh_overview_for_test() -> Result<(usize, usize), String> {
         let mut app = AppState::new();
         refresh_overview_state(&mut app)?;
@@ -1604,7 +1730,7 @@ pub mod testing {
     }
 
     pub fn logo_text_for_test(phase: usize) -> Text<'static> {
-        basket_logo_text(phase)
+        basket_logo_text(phase, theme_by_index(0))
     }
 
     fn refresh_stub_for_test(app: &mut AppState) -> Result<(), String> {
@@ -1621,8 +1747,8 @@ pub mod testing {
     }
 }
 
-fn basket_logo_text(phase: usize) -> Text<'static> {
-    let colors = THEME.logo_colors;
+fn basket_logo_text(phase: usize, theme: &Theme) -> Text<'static> {
+    let colors = theme.logo_colors;
 
     let lines = [
         "░████████      ░███      ░██████   ░██     ░██ ░██████████ ░██████████",
