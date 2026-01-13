@@ -2,7 +2,6 @@
 
 [![CI](https://github.com/YasinYA/basket/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/YasinYA/basket/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Crates.io](https://img.shields.io/badge/crate-1.0.0-blue.svg)](https://crates.io/crates/basket)
 
 Basket is a local TUI for understanding your shell history and spotting risky command patterns. It ingests your command history, shows overview analytics, and runs a lightweight rule-based IDS to flag suspicious activity with explanations.
 
@@ -25,7 +24,7 @@ Basket is a local TUI for understanding your shell history and spotting risky co
 cargo run
 ```
 
-## Installation
+## Installation (From Source)
 
 ### Prerequisites
 
@@ -42,16 +41,10 @@ cargo build --release
 
 Binary will be at `target/release/basket`.
 
-### Install via Cargo
+### Install via Cargo (Local)
 
 ```bash
 cargo install --path .
-```
-
-Then run:
-
-```bash
-basket
 ```
 
 ### Run
