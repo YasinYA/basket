@@ -16,6 +16,16 @@ cargo run
 - Keep changes focused and easy to review.
 - Prefer small, well‑scoped PRs.
 
+## Pre-commit tests
+
+We run tests before each commit locally. Install the hook:
+
+```bash
+ln -s ../../scripts/pre-commit-test.sh .git/hooks/pre-commit
+```
+
+If you already have a pre-commit hook, merge the command or run `cargo test` before committing.
+
 ## Reporting Issues
 
 Please include:
