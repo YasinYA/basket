@@ -218,6 +218,37 @@ pub fn get_recent_entries_with_conn(
     Ok(entries?)
 }
 
+pub fn get_latest_entry_for_command(command: &str) -> Result<Option<Entry>, Box<dyn Error>> {
+    let conn = establish_connection()?;
+    get_latest_entry_for_command_with_conn(&conn, command)
+}
+
+fn get_latest_entry_for_command_with_conn(
+    conn: &Connection,
+    command: &str,
+) -> Result<Option<Entry>, Box<dyn Error>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, timestamp, command, date, status, user FROM history WHERE command = ?1 ORDER BY timestamp DESC LIMIT 1",
+    )?;
+    let mut rows = stmt.query_map([command], |row| {
+        let status_str: String = row.get(4)?;
+        Ok(Entry {
+            id: row.get::<_, String>(0)?,
+            timestamp: row.get::<_, i64>(1)?,
+            command: row.get::<_, String>(2)?,
+            date: row.get::<_, String>(3)?,
+            status: parse_status(&status_str),
+            user: row.get::<_, String>(5)?,
+        })
+    })?;
+
+    if let Some(row) = rows.next() {
+        Ok(Some(row?))
+    } else {
+        Ok(None)
+    }
+}
+
 pub fn ensure_user_column(conn: &Connection) -> Result<(), Box<dyn Error>> {
     let mut stmt = conn.prepare("PRAGMA table_info(history)")?;
     let mut rows = stmt.query([])?;

@@ -14,14 +14,17 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::prelude::Frame;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table, TableState};
+use ratatui::widgets::{
+    Block, Borders, Cell, List, ListItem, Paragraph, Row, Table, TableState, Wrap,
+};
 use ratatui::Terminal;
 use tui_piechart::{symbols, PieChart, PieSlice, Resolution};
 
 use crate::analysis::{get_overview_tables, OverviewTables};
 use crate::ids::{detect_intrusions, IntrusionFinding};
 use crate::runtime::realtime::save_realtime_commands;
-use crate::storage::db::{get_recent_entries, CommandStatus, Entry};
+use crate::storage::config::{load_config, save_config, AppConfig};
+use crate::storage::db::{get_latest_entry_for_command, get_recent_entries, CommandStatus, Entry};
 
 #[derive(Copy, Clone)]
 struct Theme {
@@ -45,7 +48,7 @@ struct Theme {
     legend_dim: Color,
 }
 
-const THEMES: [Theme; 16] = [
+const THEMES: [Theme; 15] = [
     Theme {
         name: "Aurora",
         gold: Color::Rgb(148, 92, 255),
@@ -556,40 +559,6 @@ const THEMES: [Theme; 16] = [
         legend_text: Color::Gray,
         legend_dim: Color::DarkGray,
     },
-    Theme {
-        name: "Flint",
-        gold: Color::Rgb(130, 130, 130),
-        gold_bright: Color::Rgb(205, 205, 205),
-        menu_inactive: Color::White,
-        menu_active: Color::Rgb(130, 130, 130),
-        menu_border: Color::Rgb(130, 130, 130),
-        footer_border: Color::Rgb(130, 130, 130),
-        header_text: Color::Rgb(205, 205, 205),
-        table_border: Color::Rgb(130, 130, 130),
-        table_header: Color::Rgb(185, 185, 185),
-        table_row_even: Color::White,
-        table_row_odd: Color::Gray,
-        table_active_bg: Color::Rgb(130, 130, 130),
-        table_active_fg: Color::White,
-        logo_colors: [
-            Color::Rgb(225, 225, 225),
-            Color::Rgb(205, 205, 205),
-            Color::Rgb(165, 165, 165),
-            Color::Rgb(130, 130, 130),
-            Color::Rgb(165, 165, 165),
-            Color::Rgb(205, 205, 205),
-        ],
-        chart_palette: [
-            Color::Rgb(130, 130, 130),
-            Color::Rgb(105, 105, 105),
-            Color::Rgb(185, 185, 185),
-            Color::Rgb(225, 225, 225),
-            Color::Rgb(145, 145, 145),
-            Color::Rgb(165, 165, 165),
-        ],
-        legend_text: Color::Gray,
-        legend_dim: Color::DarkGray,
-    },
 ];
 
 fn theme_by_index(index: usize) -> &'static Theme {
@@ -635,10 +604,23 @@ struct AppState {
     intrusion_rows: Vec<Vec<String>>,
     last_refresh: Instant,
     theme_index: usize,
+    detail_dialog: Option<DetailDialog>,
+}
+
+struct CommandDetail {
+    command: String,
+    status: String,
+    user: String,
+    time: String,
+}
+
+enum DetailDialog {
+    Command(CommandDetail),
+    Message(String),
 }
 
 impl AppState {
-    fn new() -> Self {
+    fn new(theme_index: usize) -> Self {
         Self {
             screen: Screen::Menu,
             menu_index: 0,
@@ -660,7 +642,8 @@ impl AppState {
             recent_rows: Vec::new(),
             intrusion_rows: Vec::new(),
             last_refresh: Instant::now(),
-            theme_index: 0,
+            theme_index,
+            detail_dialog: None,
         }
     }
 }
@@ -689,7 +672,8 @@ fn run_loop(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
 ) -> Result<TuiExit, Box<dyn Error>> {
     let menu_items = ["View overview", "Start realtime watcher", "Exit"];
-    let mut app = AppState::new();
+    let config = load_config();
+    let mut app = AppState::new(config.theme_index % THEMES.len());
     let tick_rate = Duration::from_millis(120);
     let refresh_rate = Duration::from_secs(1);
 
@@ -716,6 +700,7 @@ fn run_loop(
                 &app.filter_buffer,
                 &app.recent_rows,
                 &app.intrusion_rows,
+                app.detail_dialog.as_ref(),
                 theme,
             ),
             Screen::Watcher => render_watcher(frame, app.watcher_spinner, theme),
@@ -769,6 +754,17 @@ fn handle_key_event(
     menu_items: &[&str],
     refresh_fn: fn(&mut AppState) -> Result<(), String>,
 ) -> Option<TuiExit> {
+    if app.detail_dialog.is_some() {
+        match key {
+            KeyCode::Esc | KeyCode::Enter | KeyCode::Char('b') => {
+                app.detail_dialog = None;
+            }
+            KeyCode::Char('q') => return Some(TuiExit::Exit),
+            _ => {}
+        }
+        return None;
+    }
+
     if app.filter_input {
         match key {
             KeyCode::Enter => {
@@ -797,6 +793,9 @@ fn handle_key_event(
 
     if let KeyCode::Char('p') = key {
         app.theme_index = (app.theme_index + 1) % THEMES.len();
+        let _ = save_config(&AppConfig {
+            theme_index: app.theme_index,
+        });
         return None;
     }
 
@@ -843,6 +842,35 @@ fn handle_key_event(
             KeyCode::Char('t') => {
                 app.overview_view = OverviewView::Tables;
                 app.table_index = 0;
+            }
+            KeyCode::Enter => {
+                if matches!(app.overview_view, OverviewView::Tables) {
+                    if let Some(command) = selected_command_from_table(app) {
+                        match get_latest_entry_for_command(&command) {
+                            Ok(Some(entry)) => {
+                                let detail = CommandDetail {
+                                    command: entry.command,
+                                    status: status_label(&entry.status),
+                                    user: entry.user,
+                                    time: format_relative_time(entry.timestamp),
+                                };
+                                app.detail_dialog = Some(DetailDialog::Command(detail));
+                            }
+                            Ok(None) => {
+                                app.detail_dialog = Some(DetailDialog::Message(format!(
+                                    "No recent entry found for \"{}\".",
+                                    command
+                                )));
+                            }
+                            Err(err) => {
+                                app.detail_dialog = Some(DetailDialog::Message(format!(
+                                    "Failed to load command details: {}",
+                                    err
+                                )));
+                            }
+                        }
+                    }
+                }
             }
             KeyCode::Char('s') => {
                 if matches!(app.overview_view, OverviewView::Tables) {
@@ -1053,6 +1081,7 @@ fn render_overview(
     filter_buffer: &str,
     recent_rows: &[Vec<String>],
     intrusion_rows: &[Vec<String>],
+    detail_dialog: Option<&DetailDialog>,
     theme: &Theme,
 ) {
     let size = frame.area();
@@ -1175,7 +1204,7 @@ fn render_overview(
     };
     let footer = match view {
         OverviewView::Tables => Paragraph::new(format!(
-            "t: tables  c: charts  ←/→: table  ↑/↓: row  s: sort({})  /: filter({})  x: clear  p: theme({})  b: back  q: quit",
+            "t: tables  c: charts  ←/→: table  ↑/↓: row  enter: details  s: sort({})  /: filter({})  x: clear  p: theme({})  b: back  q: quit",
             sort_label, filter_label, theme.name
         )),
         OverviewView::Charts => Paragraph::new(format!(
@@ -1192,6 +1221,10 @@ fn render_overview(
 
     if filter_input {
         render_filter_prompt(frame, layout[0], filter_buffer, theme);
+    }
+
+    if let Some(detail) = detail_dialog {
+        render_detail_dialog(frame, detail, theme);
     }
 }
 
@@ -1569,6 +1602,82 @@ fn render_filter_prompt(frame: &mut Frame, area: Rect, buffer: &str, theme: &The
     frame.render_widget(prompt, rect);
 }
 
+fn render_detail_dialog(frame: &mut Frame, detail: &DetailDialog, theme: &Theme) {
+    let size = frame.area();
+    let width = size.width.saturating_sub(6).min(76).max(30);
+    let height = match detail {
+        DetailDialog::Command(_) => 9,
+        DetailDialog::Message(_) => 7,
+    };
+    let x = size.x + (size.width.saturating_sub(width)) / 2;
+    let y = size.y + (size.height.saturating_sub(height)) / 2;
+    let rect = Rect {
+        x,
+        y,
+        width,
+        height,
+    };
+
+    let label_style = Style::default()
+        .fg(theme.table_header)
+        .add_modifier(Modifier::BOLD);
+    let dim_style = Style::default().fg(theme.legend_dim);
+
+    let (title, content, content_style) = match detail {
+        DetailDialog::Command(detail) => {
+            let lines = vec![
+                Line::from(vec![
+                    Span::styled("Command: ", label_style),
+                    Span::raw(detail.command.as_str()),
+                ]),
+                Line::from(vec![
+                    Span::styled("Status:  ", label_style),
+                    Span::raw(detail.status.as_str()),
+                ]),
+                Line::from(vec![
+                    Span::styled("User:    ", label_style),
+                    Span::raw(detail.user.as_str()),
+                ]),
+                Line::from(vec![
+                    Span::styled("Time:    ", label_style),
+                    Span::raw(detail.time.as_str()),
+                ]),
+                Line::raw(""),
+                Line::styled("Esc/Enter to close", dim_style),
+            ];
+            (
+                "Command Details",
+                Text::from(lines),
+                Style::default().fg(theme.menu_inactive),
+            )
+        }
+        DetailDialog::Message(message) => {
+            let lines = vec![
+                Line::raw(message.as_str()),
+                Line::raw(""),
+                Line::styled("Esc/Enter to close", dim_style),
+            ];
+            (
+                "Command Details",
+                Text::from(lines),
+                Style::default().fg(Color::Red),
+            )
+        }
+    };
+
+    let dialog = Paragraph::new(content)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(title)
+                .border_style(Style::default().fg(theme.gold)),
+        )
+        .style(content_style)
+        .wrap(Wrap { trim: true });
+
+    frame.render_widget(dialog, rect);
+}
+
 fn render_recent_table(frame: &mut Frame, area: Rect, data: &[Vec<String>], theme: &Theme) {
     let rows: Vec<Row> = if data.is_empty() {
         vec![Row::new(vec![
@@ -1780,11 +1889,7 @@ fn build_recent_rows(entries: &[Entry]) -> Vec<Vec<String>> {
     entries
         .iter()
         .map(|entry| {
-            let status = match &entry.status {
-                CommandStatus::Success => "Success".to_string(),
-                CommandStatus::Unknown => "Unknown".to_string(),
-                CommandStatus::Error(code) => format!("Error({})", code),
-            };
+            let status = status_label(&entry.status);
             let when = format_relative_time(entry.timestamp);
             vec![entry.command.clone(), status, when]
         })
@@ -1838,6 +1943,31 @@ fn score_to_color(score: i32) -> Color {
     Color::Rgb(r, g, b)
 }
 
+fn status_label(status: &CommandStatus) -> String {
+    match status {
+        CommandStatus::Success => "Success".to_string(),
+        CommandStatus::Unknown => "Unknown".to_string(),
+        CommandStatus::Error(code) => format!("Error({})", code),
+    }
+}
+
+fn selected_command_from_table(app: &AppState) -> Option<String> {
+    let tables = app.overview.as_ref()?;
+    let (data, selection) = match app.table_index {
+        0 => (&tables.top_commands, app.table_selection[0]),
+        1 => (&tables.top_unsuccessful, app.table_selection[1]),
+        _ => (&tables.mistyped_commands, app.table_selection[2]),
+    };
+
+    let rows = filter_sort_rows(data, &app.filter_query, app.sort_asc);
+    if rows.is_empty() {
+        return None;
+    }
+
+    let selected = selection.min(rows.len().saturating_sub(1));
+    rows.get(selected).and_then(|row| row.get(0).cloned())
+}
+
 pub mod testing {
     use super::*;
 
@@ -1849,7 +1979,7 @@ pub mod testing {
     impl TestState {
         pub fn new() -> Self {
             Self {
-                app: AppState::new(),
+                app: AppState::new(0),
             }
         }
 
@@ -2028,6 +2158,7 @@ pub mod testing {
             filter_buffer,
             recent_rows,
             intrusion_rows,
+            None,
             theme_by_index(0),
         );
     }
@@ -2166,7 +2297,7 @@ pub mod testing {
     }
 
     pub fn refresh_overview_for_test() -> Result<(usize, usize), String> {
-        let mut app = AppState::new();
+        let mut app = AppState::new(0);
         refresh_overview_state(&mut app)?;
         Ok((app.recent_rows.len(), app.intrusion_rows.len()))
     }

@@ -51,6 +51,7 @@ fn handle_key_events_cover_menu_and_overview() {
     state.handle_key(KeyCode::Backspace, &menu_items);
     state.handle_key(KeyCode::Enter, &menu_items);
     assert!(!state.filter_input());
+    state.handle_key(KeyCode::Esc, &menu_items);
 
     state.handle_key(KeyCode::Left, &menu_items);
     state.handle_key(KeyCode::Right, &menu_items);

@@ -99,6 +99,7 @@ Example:
 - SQLite DB at `/Users/yasinya/basket.db`
 - Command history from your shell history file
 - Realtime ingest from `.cmdlog.json`
+- Theme preference saved to `~/.basket_config.json` (override with `BASKET_CONFIG_PATH`)
 
 ## Architecture
 
